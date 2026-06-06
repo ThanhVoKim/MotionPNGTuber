@@ -22,6 +22,20 @@
 | 2026/04/03 | 口PNG抽出GUIの使い勝手を改善 |
 | 2026/01/09 | パッケージ管理を **uv** に移行 |
 
+> **⚠️ インストールに関する注意（2026-06）— `download.openmmlab.com` が停止中**
+>
+> `mmcv-full` のビルド済みwheelを配信していたドメインがグローバルに接続不可になっています。
+> `uv sync` は代替手段を使うよう更新済みですが、プラットフォームごとに追加手順が必要です。
+>
+> | プラットフォーム | 変更点 | 必要な手順 |
+> |-----------------|--------|-----------|
+> | **Windows** | Wayback MirrorからWheelを取得 | `rm uv.lock` してから `uv sync`（初回は~155 MB ダウンロード） |
+> | **Linux** | アーカイブなし → ソースビルド | `MMCV_WITH_OPS=1 FORCE_CUDA=0 uv sync`（~5-10分） |
+> | **Google Colab** | `colab_setup.py` を使用 | 下記 [Google Colab](#google-colab-cpu) セクション参照 |
+> | **macOS** | 変更なし | 既存のソースビルド手順のまま |
+>
+> 長期的な解決策: GitHub Releases に wheel をホストすれば、すべてのプラットフォームで追加手順不要になります。
+
 ## ✨ 特徴
 
 | 機能 | 説明 |
@@ -42,6 +56,7 @@
   - [Windows](#windows)
   - [macOS (実験的)](#macos-実験的)
   - [Ubuntu 22.04 (実験的)](#ubuntu-2204-実験的)
+  - [Google Colab (CPU)](#google-colab-cpu)
 - [使い方](#-使い方)
   - [メインGUI](#メインgui)
   - [口PNG素材作成GUI](#-口png素材作成gui)
@@ -57,7 +72,7 @@
 
 ### 必要なもの
 
-- Python 3.10
+- Python 3.10（uvが自動でインストールします。マシンに3.11/3.12/3.13が入っていても問題ありません）
 - uv（パッケージマネージャー）
   - Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
   - macOS / Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
@@ -224,6 +239,34 @@ uv run python mouth_track_gui.py
 - Linux の音声入力列挙は Windows / macOS と挙動が異なる場合があります。
 - USB マイクが通常の `sd:` デバイスとして見えない場合は、音声一覧の `pa:... (via pulse)` を試してください。
 - `pactl` が使えない環境では Linux 向け音声フォールバックは限定的です。
+
+</details>
+
+### Google Colab (CPU)
+
+<details>
+<summary><b>クリックして展開（GPU不要）</b></summary>
+
+ローカル環境なしでGoogle ColabでMotionPNGTuberの解析を実行できます。
+検出器は **CPU** で動作します。GPU ランタイムは不要です。
+
+#### 使い方
+
+1. このリポジトリの [`colab_setup.py`](colab_setup.py) を開き、`# %%` の区切りごとに Colab の**別々のコードセル**にコピペします。
+2. セルを順番に実行: **Cell 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8** でインストール完了。
+3. **Cell 9** で動画をアップロードし、顔検出器を実行 → `mouth_track.npz` を生成。
+4. **Cell 10** で結果ファイルをダウンロード。
+
+#### 注意事項
+
+- **Cell 6**（`mmcv-full` をソースからビルド）は **約5〜10分** かかります。中断しないでください。
+- **Cell 9**（初回の検出器実行）でモデルの重みを **約300 MB** ダウンロードします。ネットワーク接続が必要です。
+- セル間でColabランタイムが再起動した場合は、**Cell 2を再実行**してから続けてください（PATHの復元が必要なため）。
+- このスクリプトは `uv sync` / `pyproject.toml` を使わず、すべてのパッケージを個別にインストールします。ロックファイルの状態に関係なく動作します。
+
+#### なぜCPUモードなのか
+
+`mmcv-full 1.7.0` は CUDA 11.7 / PyTorch 1.13 向けにビルドされていましたが、ColabのデフォルトランタイムはCUDA 12.x / PyTorch 2.xを使用しており、対応するGPUビルド済みwheelはもう存在しません。`FORCE_CUDA=0` でビルドするとCPU専用の `mmcv-full` が生成され、検出器と完全に互換性があります。処理は遅く（1フレームあたり~1-3秒）なりますが安定して動作します。
 
 </details>
 
@@ -540,6 +583,23 @@ MotionPNGTuber/
 
 ### `uv sync` が失敗する
 
+`download.openmmlab.com` に関するエラーが出た場合（ドメイン停止中）は、プラットフォームごとに対処してください。
+
+**Windows** — ロックファイルを削除して再sync（Wayback Mirrorからwheel取得、約155 MB）:
+```bash
+rm uv.lock
+uv sync
+```
+
+**Linux** — ソースビルドで約5〜10分かかります:
+```bash
+rm uv.lock
+MMCV_WITH_OPS=1 FORCE_CUDA=0 uv sync
+```
+
+**Google Colab** — `uv sync` の代わりに [`colab_setup.py`](colab_setup.py) を使ってください。
+
+その他のエラーの場合はキャッシュをクリアしてから再試行:
 ```bash
 uv cache clean
 uv sync

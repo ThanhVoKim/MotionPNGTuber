@@ -19,7 +19,7 @@ dependencies = [
     "pillow>=10.0.0",
     "pip>=24.0",
     "scipy>=1.10.0",
-    "setuptools>=60.0.0,<70.0.0",
+    "setuptools>=60.0.0,<81.0.0",
     "sounddevice>=0.4.6",
     "torch==1.13.1+cu117 ; sys_platform == 'win32' or sys_platform == 'linux'",
     "torchvision==0.14.1+cu117 ; sys_platform == 'win32' or sys_platform == 'linux'"
@@ -44,13 +44,19 @@ torch = [
 torchvision = [
     { index = "pytorch-cu117", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
+# mmcv-full: download.openmmlab.com is offline (2026-06).
+# Linux wheel re-hosted on GitHub Releases (ThanhVoKim/mmcv-wheels).
+# Windows wheel served from Wayback Machine (original openmmlab bytes, cp310 cu117).
 mmcv-full = [
-    { url = "https://download.openmmlab.com/mmcv/dist/cu117/torch1.13.0/mmcv_full-1.7.0-cp310-cp310-manylinux1_x86_64.whl", marker = "sys_platform == 'linux'" },
-    { url = "https://download.openmmlab.com/mmcv/dist/cu117/torch1.13.0/mmcv_full-1.7.0-cp310-cp310-win_amd64.whl", marker = "sys_platform == 'win32'" },
+    { url = "https://github.com/ThanhVoKim/mmcv-wheels/releases/download/wheels-mmcv1.7.0/mmcv_full-1.7.0-cp310-cp310-linux_x86_64.whl", marker = "sys_platform == 'linux'" },
+    { url = "https://web.archive.org/web/20260113022446id_/https://download.openmmlab.com/mmcv/dist/cu117/torch1.13.0/mmcv_full-1.7.0-cp310-cp310-win_amd64.whl", marker = "sys_platform == 'win32'" },
 ]
 
 [tool.uv.extra-build-dependencies]
 chumpy = ["wheel", "pip", "setuptools"]
+# mmcv-full 1.7.0 setup.py imports pkg_resources (removed in setuptools>=82).
+# Pinning setuptools<81 in the isolated build env restores it.
+mmcv-full = ["setuptools<81", "wheel", "pip", "ninja", "cython"]
 
 [project.scripts]
 mouth-track-gui = "mouth_track_gui:main"

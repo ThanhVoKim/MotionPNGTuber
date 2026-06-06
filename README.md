@@ -22,6 +22,20 @@ By using looping video, you can achieve rich expressions like **hair swaying** a
 | 2026/04/03 | Improved mouth PNG extraction GUI usability |
 | 2026/01/09 | Migrated package management to **uv** |
 
+> **⚠️ Installation Notice (2026-06) — `download.openmmlab.com` is offline**
+>
+> The domain that hosted pre-built `mmcv-full` wheels is no longer reachable globally.
+> `uv sync` has been updated to work around this, but extra steps are needed per platform:
+>
+> | Platform | What changed | Action required |
+> |----------|-------------|-----------------|
+> | **Windows** | Wheel now fetched from Wayback Mirror | `rm uv.lock` then `uv sync` (first run downloads ~155 MB via Wayback) |
+> | **Linux** | No archived wheel → builds from source | `MMCV_WITH_OPS=1 FORCE_CUDA=0 uv sync` (takes ~5-10 min) |
+> | **Google Colab** | Use `colab_setup.py` | See [Google Colab](#google-colab-cpu) section below |
+> | **macOS** | No change | Existing source-build procedure |
+>
+> Long-term fix: once `mmcv-full` wheels are hosted on GitHub Releases, `uv sync` will work on all platforms without extra steps.
+
 ## ✨ Features
 
 | Feature | Description |
@@ -42,6 +56,7 @@ By using looping video, you can achieve rich expressions like **hair swaying** a
   - [Windows](#windows)
   - [macOS (Experimental)](#macos-experimental)
   - [Ubuntu 22.04 (Experimental)](#ubuntu-2204-experimental)
+  - [Google Colab (CPU)](#google-colab-cpu)
 - [Usage](#-usage)
   - [Main GUI](#main-gui)
   - [Mouth PNG Creation GUI](#-mouth-png-creation-gui)
@@ -57,7 +72,7 @@ By using looping video, you can achieve rich expressions like **hair swaying** a
 
 ### Requirements
 
-- Python 3.10
+- Python 3.10 (uv installs it automatically — having Python 3.11/3.12/3.13 on your machine is fine)
 - uv (package manager)
   - Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
   - macOS / Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
@@ -224,6 +239,34 @@ uv run python mouth_track_gui.py
 - Linux audio input enumeration can differ from Windows/macOS.
 - If your USB mic does not appear as a normal `sd:` device, try a `pa:... (via pulse)` item in the audio list.
 - If `pactl` is unavailable, Linux audio fallback support is limited.
+
+</details>
+
+### Google Colab (CPU)
+
+<details>
+<summary><b>Click to expand (no GPU required)</b></summary>
+
+Run MotionPNGTuber analysis in Google Colab without any local install.
+The detector runs on **CPU** — no GPU runtime needed.
+
+#### How to use
+
+1. Open [`colab_setup.py`](colab_setup.py) in this repo and copy-paste each `# %%` block into a **separate Colab code cell**.
+2. Run cells in order: **Cell 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8** to complete the install.
+3. Use **Cell 9** to upload a video and run the face detector → produces `mouth_track.npz`.
+4. Use **Cell 10** to download the results to your machine.
+
+#### Key notes
+
+- **Cell 6** (build `mmcv-full` from source) takes **~5-10 minutes** — do not interrupt it.
+- **Cell 9** (first detector run) downloads model weights **~300 MB** — needs network.
+- If the Colab runtime restarts between cells, **re-run Cell 2** to restore `uv` in PATH before continuing.
+- The install does **not** use `uv sync` / `pyproject.toml` — all packages are installed manually so it works regardless of the repo's lockfile state.
+
+#### Why CPU mode?
+
+`mmcv-full 1.7.0` was built for CUDA 11.7 / PyTorch 1.13, but Colab's default runtime uses CUDA 12.x / PyTorch 2.x — the pre-built GPU wheels no longer exist. Building with `FORCE_CUDA=0` produces a CPU-only `mmcv-full` that is fully compatible with the detector. Processing is slower (~1-3s per frame) but reliable.
 
 </details>
 
@@ -539,6 +582,23 @@ MotionPNGTuber/
 
 ### `uv sync` fails
 
+If you see an error about `download.openmmlab.com` (domain offline), the fix depends on your platform:
+
+**Windows** — delete the stale lock file and re-sync (downloads wheel from Wayback Mirror, ~155 MB):
+```bash
+rm uv.lock
+uv sync
+```
+
+**Linux** — build `mmcv-full` from source (~5-10 min):
+```bash
+rm uv.lock
+MMCV_WITH_OPS=1 FORCE_CUDA=0 uv sync
+```
+
+**Google Colab** — use [`colab_setup.py`](colab_setup.py) instead of `uv sync`.
+
+For other errors, try clearing the cache first:
 ```bash
 uv cache clean
 uv sync
