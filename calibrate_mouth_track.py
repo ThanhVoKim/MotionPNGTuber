@@ -3,27 +3,27 @@
 """
 calibrate_mouth_track.py
 
-既存の mouth_track.npz に対して、スプライトのサイズ・位置・回転を
-インタラクティブに調整するツール。
+An interactive tool to adjust the size, position, and rotation of the sprite
+for an existing mouth_track.npz.
 
-使い方:
+Usage:
     python calibrate_mouth_track.py \
         --video "assets/asmr_tomari/asmr_loop.mp4" \
         --track "assets/asmr_tomari/mouth_track.npz" \
         --sprite "assets/asmr_tomari/mouth/open.png" \
         --out "assets/asmr_tomari/mouth_track_calibrated.npz"
 
-操作:
-    - マウス左ドラッグ: 移動
-    - マウスホイール: スケール (Ctrl+ホイールで微調整)
-    - マウス右ドラッグ: 回転
-    - 矢印キー: 微移動
-    - +/-: スケール
-    - z/x: 回転
-    - [/]: フレーム移動（プレビュー用。パラメータ自体は維持されます）
-    - r: 中立値にリセット（offset=0, scale=1, rotation=0）
-    - Space/Enter: 確定
-    - q/Esc: キャンセル
+Controls:
+    - Mouse Left Drag: Move
+    - Mouse Wheel: Scale (Ctrl+Wheel for fine adjustment)
+    - Mouse Right Drag: Rotate
+    - Arrow keys: Nudge
+    - +/-: Scale
+    - z/x: Rotate
+    - [/]: Move frame (For preview. Parameters are maintained)
+    - r: Reset to neutral (offset=0, scale=1, rotation=0)
+    - Space/Enter: Confirm
+    - q/Esc: Cancel
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ from motionpngtuber.mouth_color_adjust import (
 )
 
 
-# Windows の cv2.waitKeyEx が返す矢印キーコード
+# Arrow key codes returned by cv2.waitKeyEx on Windows
 ARROW_LEFT = 2424832
 ARROW_UP = 2490368
 ARROW_RIGHT = 2555904
@@ -62,7 +62,7 @@ def load_bgra(path: str) -> np.ndarray:
 def warp_sprite_to_quad(src_sprite_4ch: np.ndarray, dst_quad: np.ndarray, out_w: int, out_h: int) -> np.ndarray:
     """Warp a 4-channel sprite in OpenCV-native order into a destination quad."""
     sh, sw = src_sprite_4ch.shape[:2]
-    # OpenCV の射影変換は端点を含む座標系の方がズレが少ない
+    # OpenCV's perspective transform has less deviation with coordinate systems including endpoints
     src_quad = np.array([[0, 0], [sw - 1, 0], [sw - 1, sh - 1], [0, sh - 1]], dtype=np.float32)
     dst = np.asarray(dst_quad, dtype=np.float32).reshape(4, 2)
     M = cv2.getPerspectiveTransform(src_quad, dst)
@@ -132,10 +132,10 @@ class DragState:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--video", required=True)
-    ap.add_argument("--track", required=True, help="入力 mouth_track.npz")
-    ap.add_argument("--sprite", required=True, help="口スプライト (サイズ確認用)")
-    ap.add_argument("--out", required=True, help="出力 calibrated npz")
-    ap.add_argument("--frame", type=int, default=0, help="開始フレーム (プレビュー用)")
+    ap.add_argument("--track", required=True, help="Input mouth_track.npz")
+    ap.add_argument("--sprite", required=True, help="Mouth sprite (for size check)")
+    ap.add_argument("--out", required=True, help="Output calibrated npz")
+    ap.add_argument("--frame", type=int, default=0, help="Start frame (for preview)")
     ap.add_argument("--ui-max-w", type=int, default=720)
     ap.add_argument("--ui-max-h", type=int, default=1280)
     ap.add_argument("--mouth-brightness", type=float, default=0.0)
@@ -173,7 +173,7 @@ def main() -> int:
     total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
 
     def read_frame(idx: int) -> np.ndarray:
-        # track の範囲で clamp（動画の frame count が取れない場合もある）
+        # Clamp within track range (sometimes video frame count cannot be obtained)
         idx = int(max(0, min(idx, N - 1)))
         if total_video_frames > 0:
             idx = int(max(0, min(idx, total_video_frames - 1)))
@@ -189,10 +189,10 @@ def main() -> int:
         color_order="BGRA",
     )
 
-    # 既存のキャリブレーション値がある場合の処理
-    # NOTE: 保存時に quads には既にキャリブレーションが適用済み。
-    #       再キャリブレーション時は 1.0/0/0 から開始する必要がある。
-    #       （既存値を再適用すると二重適用になってしまう）
+    # Handling existing calibration values
+    # NOTE: quads already have calibration applied upon saving.
+    #       When recalibrating, must start from 1.0/0/0.
+    #       (Reapplying existing values would double-apply)
     has_existing_calib = "calib_scale" in track.files or "calib_offset" in track.files
     if has_existing_calib:
         prev_offset = track["calib_offset"].astype(np.float32) if "calib_offset" in track.files else np.zeros(2, np.float32)
@@ -201,12 +201,12 @@ def main() -> int:
         print(f"[info] existing calibration found: offset=({prev_offset[0]:.2f}, {prev_offset[1]:.2f}), scale={prev_scale:.4f}, rot={prev_rotation:.2f}deg")
         print(f"[info] starting from neutral (1.0/0/0) since quads already include previous calibration")
 
-    # 常に中立値から開始（quads は既にキャリブレーション適用済みのため）
+    # Always start from neutral (because quads already have calibration applied)
     offset = np.array([0.0, 0.0], dtype=np.float32)
     scale = 1.0
     rotation = 0.0
 
-    # reset 用に初期値を保持
+    # Keep initial values for reset
     init_offset = offset.copy()
     init_scale = float(scale)
     init_rotation = float(rotation)
@@ -340,7 +340,7 @@ def main() -> int:
             if key in (27, ord("q")):
                 print("[calib] cancelled")
                 cv2.destroyAllWindows()
-                return 1  # キャンセル時は非ゼロ
+                return 1  # Non-zero on cancel
 
             if key in (13, 32):  # Enter or Space
                 break
@@ -384,7 +384,7 @@ def main() -> int:
         cap.release()
 
     print(f"[info] applying transform to {N} frames...")
-    # ベクトル化（高速）
+    # Vectorized (fast)
     quads_center = quads.mean(axis=1, keepdims=True)  # (N,1,2)
     rel = (quads - quads_center) * float(scale)
     th = math.radians(float(rotation))

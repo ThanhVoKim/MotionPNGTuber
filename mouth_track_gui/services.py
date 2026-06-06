@@ -77,22 +77,22 @@ def ensure_backend_sanity(base_dir: str) -> tuple[bool, str]:
     erase_py = os.path.join(base_dir, "auto_erase_mouth.py")
 
     if not os.path.isfile(track_py):
-        return False, "auto_mouth_track_v2.py が見つかりません。"
+        return False, "auto_mouth_track_v2.py not found."
     if not os.path.isfile(erase_py):
-        return False, "auto_erase_mouth.py が見つかりません。"
+        return False, "auto_erase_mouth.py not found."
 
     if not script_contains(track_py, ["--pad", "--det-scale", "--min-conf"]):
         return (
             False,
-            "auto_mouth_track_v2.py が追跡用スクリプトではないようです（--pad 等が見つかりません）。\n"
-            "ファイルが入れ替わっていないか確認してください。",
+            "auto_mouth_track_v2.py does not appear to be a tracking script (--pad etc. not found).\n"
+            "Please check if the file has been swapped.",
         )
 
     if not script_contains(erase_py, ["--track", "--coverage"]):
         return (
             False,
-            "auto_erase_mouth.py が口消し用スクリプトではないようです（--track/--coverage が見つかりません）。\n"
-            "ファイルが入れ替わっていないか確認してください。",
+            "auto_erase_mouth.py does not appear to be an erasure script (--track/--coverage not found).\n"
+            "Please check if the file has been swapped.",
         )
 
     return True, ""

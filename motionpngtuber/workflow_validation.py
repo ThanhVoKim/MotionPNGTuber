@@ -16,16 +16,16 @@ class WorkflowPaths:
 
 
 def format_missing_path_message(label: str, path: str, next_step: str = "") -> str:
-    lines = [f"{label} が見つかりません。", f"期待した場所: {path}"]
+    lines = [f"{label} not found.", f"Expected location: {path}"]
     if next_step:
         lines.append(next_step)
     return "\n".join(lines)
 
 
 def format_missing_paths_message(label: str, paths: list[str], next_step: str = "") -> str:
-    lines = [f"{label} が見つかりません。"]
+    lines = [f"{label} not found."]
     if paths:
-        lines.append("確認した場所:")
+        lines.append("Checked locations:")
         for path in paths:
             lines.append(f"- {path}")
     if next_step:
@@ -51,7 +51,7 @@ def summarize_named_issues(
     for name, reason in items[: max(1, limit)]:
         lines.append(f"- {name}: {reason}")
     if len(items) > limit:
-        lines.append("…")
+        lines.append("...")
     if tail_hint:
         lines.append(tail_hint)
     return "\n".join(lines)
@@ -88,8 +88,8 @@ def build_workflow_paths(
 ) -> tuple[WorkflowPaths | None, str]:
     video_path, err = validate_existing_file(
         source_video,
-        empty_message="動画を選択してください。",
-        missing_label="動画ファイル",
+        empty_message="Please select a video.",
+        missing_label="Video file",
     )
     if video_path is None:
         return None, err
@@ -102,14 +102,14 @@ def build_workflow_paths(
         return None, format_missing_path_message(
             "mouth_track.npz",
             track_npz,
-            "先に『① 解析→キャリブ』を実行してください。",
+            "Please run '1. Analyze -> Calibrate' first.",
         )
 
     if require_calibrated and not os.path.isfile(calib_npz):
         return None, format_missing_path_message(
             "mouth_track_calibrated.npz",
             calib_npz,
-            "『キャリブのみ（やり直し）』または『① 解析→キャリブ』を実行してください。",
+            "Please run 'Calibrate Only (Retry)' or '1. Analyze -> Calibrate'.",
         )
 
     preferred_track = resolve_preferred_track_path(

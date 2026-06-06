@@ -3,17 +3,17 @@
 """
 mouth_sprite_extractor_gui.py
 
-動画から口スプライト（5種類のPNG）を自動抽出するGUIツール。
+GUI tool to automatically extract mouth sprites (5 types of PNG) from a video.
 
-機能:
-1. 動画を選択（ドラッグ&ドロップ対応）
-2. 動画選択後に自動解析して口トラッキングを準備
-3. 別ウィンドウの候補選択プレイヤーで再生/停止/コマ送りしながら候補フレームを手動追加
-4. 必要に応じて候補の自動選出・口形の自動割り当ても補助的に利用
-5. 切り取り範囲（上下左右）とフェザー幅を別々に調整
-6. プレビュー更新、ライブ試験、出力まで一通り確認可能
+Features:
+1. Select a video (drag & drop supported)
+2. Automatically analyze and prepare mouth tracking after selecting a video
+3. Manually add candidate frames while playing/stopping/stepping in the candidate selection player in a separate window
+4. Auxiliary use of automatic candidate selection and mouth shape assignment if necessary
+5. Adjust crop range (top/bottom/left/right) and feather width separately
+6. Check preview updates, live tests, and output comprehensively
 
-使い方:
+Usage:
     python mouth_sprite_extractor_gui.py
 """
 
@@ -92,18 +92,18 @@ from motionpngtuber.platform_open import open_path_with_default_app
 APP_TITLE = "Mouth Sprite Extractor"
 BASE_CANDIDATE_COUNT = 10
 OPENING_SEQ_COUNT = 10
-CANDIDATE_COUNT = BASE_CANDIDATE_COUNT + OPENING_SEQ_COUNT  # 候補フレーム数
+CANDIDATE_COUNT = BASE_CANDIDATE_COUNT + OPENING_SEQ_COUNT  # Candidate frames count
 CANDIDATE_ROWS = 2
 CANDIDATE_PER_ROW = (CANDIDATE_COUNT + CANDIDATE_ROWS - 1) // CANDIDATE_ROWS
 MOUTH_SHAPES = ("open", "closed", "half", "e", "u")
-MOUTH_ASSIGNMENT_OPTIONS = ("未設定",) + MOUTH_SHAPES
-THUMB_SIZE = 70       # サムネイルサイズ
-PREVIEW_SIZE = 150    # プレビューサイズ（1.5倍に拡大）
+MOUTH_ASSIGNMENT_OPTIONS = ("Unassigned",) + MOUTH_SHAPES
+THUMB_SIZE = 70       # Thumbnail size
+PREVIEW_SIZE = 150    # Preview size (1.5x zoom)
 PLAYER_PREVIEW_MAX_W = 640
 PLAYER_PREVIEW_MAX_H = 420
 DEFAULT_FEATHER = 15
-DEFAULT_CROP = 0      # デフォルトの切り取り余白
-MAX_CROP = 100        # 切り取り範囲の最大値
+DEFAULT_CROP = 0      # Default crop margin
+MAX_CROP = 100        # Maximum crop range
 MAX_FEATHER = 40
 
 
@@ -112,7 +112,7 @@ MAX_FEATHER = 40
 # ---------------------------------------------------------------------------
 
 def create_checkerboard(w: int, h: int, cell_size: int = 10) -> np.ndarray:
-    """透過表示用のチェッカーボード背景を生成"""
+    """Generate a checkerboard background for transparent display"""
     board = np.zeros((h, w, 3), dtype=np.uint8)
     for y in range(0, h, cell_size):
         for x in range(0, w, cell_size):
@@ -124,7 +124,7 @@ def create_checkerboard(w: int, h: int, cell_size: int = 10) -> np.ndarray:
 
 
 def composite_on_checkerboard(rgba: np.ndarray) -> np.ndarray:
-    """RGBAをチェッカーボード上に合成してRGB画像を返す"""
+    """Composite RGBA on checkerboard and return RGB image"""
     h, w = rgba.shape[:2]
     board = create_checkerboard(w, h)
     
@@ -141,7 +141,7 @@ def numpy_to_photoimage(
     *,
     color_order: str = "BGR",
 ) -> Optional["ImageTk.PhotoImage"]:
-    """BGR/RGB numpy配列をPhotoImageに変換"""
+    """Convert BGR/RGB numpy array to PhotoImage"""
     if not _HAS_PIL:
         return None
 
@@ -153,7 +153,7 @@ def numpy_to_photoimage(
         raise ValueError(f"Unsupported color_order: {color_order}")
     img = Image.fromarray(rgb)
     
-    # アスペクト比を維持してリサイズ
+    # Resize maintaining aspect ratio
     w, h = img.size
     scale = min(size / max(w, 1), size / max(h, 1))
     new_w = max(1, int(w * scale))
@@ -170,7 +170,7 @@ def numpy_to_photoimage_fit(
     *,
     color_order: str = "BGR",
 ) -> Optional["ImageTk.PhotoImage"]:
-    """BGR/RGB numpy配列を指定枠内に収まるPhotoImageに変換"""
+    """Convert BGR/RGB numpy array to PhotoImage that fits within a specified frame"""
     if not _HAS_PIL:
         return None
 
@@ -190,7 +190,7 @@ def numpy_to_photoimage_fit(
 
 
 def first_non_none(*values):
-    """None ではない最初の値を返す。numpy配列の truth 判定を避ける。"""
+    """Return the first non-None value to avoid truth value testing of numpy arrays."""
     for v in values:
         if v is not None:
             return v
@@ -201,7 +201,7 @@ def draw_mouth_quad_overlay(
     frame_bgr: np.ndarray,
     mf: Optional[MouthFrameInfo],
 ) -> np.ndarray:
-    """プレイヤー表示用に口quadを重ねる"""
+    """Overlay mouth quad for player display"""
     out = frame_bgr.copy()
     if mf is None:
         cv2.putText(
@@ -238,7 +238,7 @@ def crop_frame_around_mouth(
     *,
     margin_scale: float = 4.0,
 ) -> np.ndarray:
-    """口quad周辺を切り出して見やすくする"""
+    """Crop around the mouth quad to make it easier to see"""
     if mf is None:
         return frame_bgr
 
@@ -266,7 +266,7 @@ def pick_opening_sequence(
     preselected: Optional[set[int]] = None,
     window: int = OPENING_SEQ_COUNT,
 ) -> List[MouthFrameInfo]:
-    """口の開き始めに近い連続フレームを選択する。"""
+    """Select consecutive frames near the beginning of mouth opening."""
     if window <= 0:
         return []
     n_frames = len(mouth_frames)
@@ -327,17 +327,17 @@ def extract_sprite_with_crop(
     feather_px: int = 15,
 ) -> np.ndarray:
     """
-    切り取り範囲とフェザーを適用してスプライトを抽出。
+    Extract sprites by applying crop range and feather.
     """
-    # 正規化空間に変換
+    # Convert to normalized space
     patch_bgr = warp_frame_to_norm(frame_bgr, quad, unified_w, unified_h)
     patch_rgb = cv2.cvtColor(patch_bgr, cv2.COLOR_BGR2RGB)
     
-    # 切り取り範囲を適用した楕円マスク
-    # 楕円の中心をずらし、半径を調整
-    # 上を削る = 楕円を下にずらす、下を削る = 楕円を上にずらす
+    # Elliptical mask with crop range applied
+    # Shift ellipse center and adjust radius
+    # Crop top = shift ellipse down, crop bottom = shift ellipse up
     cx = unified_w // 2 + (crop_left - crop_right) // 2
-    cy = unified_h // 2 + (crop_top - crop_bottom) // 2  # 方向を修正
+    cy = unified_h // 2 + (crop_top - crop_bottom) // 2  # Fix direction
     rx = (unified_w - crop_left - crop_right) // 2
     ry = (unified_h - crop_top - crop_bottom) // 2
     
@@ -347,10 +347,10 @@ def extract_sprite_with_crop(
     mask = np.zeros((unified_h, unified_w), dtype=np.uint8)
     cv2.ellipse(mask, (cx, cy), (rx, ry), 0.0, 0.0, 360.0, 255, -1)
     
-    # フェザー適用
+    # Apply feather
     mask_f = feather_mask(mask, feather_px)
     
-    # RGBA画像を生成
+    # Generate RGBA image
     rgba = np.zeros((unified_h, unified_w, 4), dtype=np.uint8)
     rgba[:, :, :3] = patch_rgb
     rgba[:, :, 3] = (mask_f * 255).astype(np.uint8)
@@ -363,7 +363,7 @@ def extract_sprite_with_crop(
 # ---------------------------------------------------------------------------
 
 class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
-    """口スプライト抽出GUIアプリケーション"""
+    """Mouth Sprite Extractor GUI Application"""
     
     def __init__(self):
         super().__init__()
@@ -377,7 +377,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self.extractor: Optional[MouthSpriteExtractor] = None
         self.valid_frames: List[MouthFrameInfo] = []
         self._mouth_frame_by_idx: Dict[int, MouthFrameInfo] = {}
-        self.candidate_frames: List[MouthFrameInfo] = []  # 候補フレーム（開き具合順）
+        self.candidate_frames: List[MouthFrameInfo] = []  # Candidate frames (in order of openness)
         self.candidate_images: List[Optional["ImageTk.PhotoImage"]] = []
         self.assignments: Dict[int, int] = {}  # candidate_idx -> mouth_type (1-5)
         self.preview_sprites: Dict[str, np.ndarray] = {}
@@ -387,9 +387,9 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self.busy_mode: str = ""
         self.selected_candidate_idx = 0
         self.preview_state_code = "empty"
-        self.preview_state_var = tk.StringVar(value="プレビュー未更新")
-        self.workflow_state_var = tk.StringVar(value="状態: 動画を選択してください")
-        self.busy_status_var = tk.StringVar(value="処理状態: 待機中")
+        self.preview_state_var = tk.StringVar(value="Preview Not Updated")
+        self.workflow_state_var = tk.StringVar(value="State: Please select a video")
+        self.busy_status_var = tk.StringVar(value="Processing State: Standby")
         self._suspend_preview_traces = False
         
         # Cached video capture for preview
@@ -428,7 +428,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self._poll_logs()
 
     def _configure_initial_window_size(self):
-        """画面サイズに応じて初期ウィンドウを大きめに設定"""
+        """Set the initial window size larger according to the screen size"""
         self.update_idletasks()
         screen_w = max(800, int(self.winfo_screenwidth() or 0))
         screen_h = max(700, int(self.winfo_screenheight() or 0))
@@ -445,7 +445,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self.minsize(1100, 900)
     
     def _build_ui(self):
-        """UIを構築"""
+        """Build UI"""
         # Main scrollable area (for shorter screens)
         container = ttk.Frame(self)
         container.pack(fill=tk.BOTH, expand=True)
@@ -473,14 +473,14 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         )
         
         # --- Video selection ---
-        video_frame = ttk.LabelFrame(main_frame, text="動画ファイル", padding=5)
+        video_frame = ttk.LabelFrame(main_frame, text="Video File", padding=5)
         video_frame.pack(fill=tk.X, pady=(0, 10))
         
         self.video_var = tk.StringVar()
         video_entry = ttk.Entry(video_frame, textvariable=self.video_var, state="readonly")
         video_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         
-        video_btn = ttk.Button(video_frame, text="選択...", command=self._on_select_video)
+        video_btn = ttk.Button(video_frame, text="Select...", command=self._on_select_video)
         video_btn.pack(side=tk.RIGHT)
         
         # Drag & drop support
@@ -488,15 +488,15 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             video_entry.drop_target_register(DND_FILES)
             video_entry.dnd_bind("<<Drop>>", self._on_drop_video)
 
-        guide_frame = ttk.LabelFrame(main_frame, text="かんたんな使い方", padding=6)
+        guide_frame = ttk.LabelFrame(main_frame, text="Quick Guide", padding=6)
         guide_frame.pack(fill=tk.X, pady=(0, 10))
         ttk.Label(
             guide_frame,
             text=(
-                "1. 動画を選ぶ（自動で解析されます）\n"
-                "2. 候補選択プレイヤーで良い口形を候補に入れる\n"
-                "3. 各候補を open / closed / half / e / u に割り当てる\n"
-                "4. プレビュー更新 → ライブ試験 → 出力"
+                "1. Select a video (analyzed automatically)\n"
+                "2. Add good mouth shapes to candidates using the player\n"
+                "3. Assign open / closed / half / e / u to each candidate\n"
+                "4. Update Preview -> Live Test -> Output"
             ),
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
@@ -509,11 +509,11 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         # --- Analyze button ---
         self.analyze_btn = ttk.Button(
-            main_frame, text="解析/再解析", command=self._on_analyze
+            main_frame, text="Analyze/Re-analyze", command=self._on_analyze
         )
         self.analyze_btn.pack(fill=tk.X, pady=(0, 10))
 
-        busy_frame = ttk.LabelFrame(main_frame, text="処理状態", padding=5)
+        busy_frame = ttk.LabelFrame(main_frame, text="Processing State", padding=5)
         busy_frame.pack(fill=tk.X, pady=(0, 10))
         self.busy_progress = ttk.Progressbar(
             busy_frame,
@@ -530,7 +530,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         # --- Player launcher area ---
         player_frame = ttk.LabelFrame(
             main_frame,
-            text="プレイヤー（別ウィンドウ）",
+            text="Player (Separate Window)",
             padding=5,
         )
         player_frame.pack(fill=tk.X, pady=(0, 10))
@@ -547,14 +547,14 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         self.open_player_btn = ttk.Button(
             player_bar,
-            text="候補選択プレイヤーを開く（おすすめ）",
+            text="Open Candidate Selection Player (Recommended)",
             command=self._show_player_window,
         )
         self.open_player_btn.pack(side=tk.RIGHT)
 
         ttk.Label(
             player_frame,
-            text="プレイヤー: 良いフレームを探して候補へ登録します。メイン画面: 割り当て・プレビュー・出力を行います。",
+            text="Player: Find good frames and register them as candidates. Main screen: Assign, preview, and output.",
             font=("", 9),
             wraplength=1000,
             justify=tk.LEFT,
@@ -563,14 +563,14 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         # --- Candidate frames area ---
         cand_frame = ttk.LabelFrame(
             main_frame,
-            text="候補フレーム",
+            text="Candidate Frames",
             padding=5,
         )
         cand_frame.pack(fill=tk.X, pady=(0, 10))
 
         ttk.Label(
             cand_frame,
-            text="プレイヤーで良い口形を探して候補に追加します。ダブルクリックでも登録できます。自動選出は補助機能です。",
+            text="Find good mouth shapes in the player and add them to candidates. You can also register by double-clicking. Auto-selection is an auxiliary function.",
             font=("", 9),
             wraplength=1000,
             justify=tk.LEFT,
@@ -601,21 +601,21 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             col_frame = ttk.Frame(self.cand_inner)
             col_frame.grid(row=row, column=col, padx=3, pady=3, sticky=tk.N)
 
-            slot_title = ttk.Label(col_frame, text=f"候補{i+1}", font=("", 8, "bold"))
+            slot_title = ttk.Label(col_frame, text=f"Candidate{i+1}", font=("", 8, "bold"))
             slot_title.pack()
             self.cand_slot_titles.append(slot_title)
              
-            # サムネイル
+            # Thumbnail
             thumb_label = ttk.Label(col_frame, text="", width=10, anchor=tk.CENTER, relief=tk.SUNKEN)
             thumb_label.pack()
             self.cand_labels.append(thumb_label)
             
-            # フレーム番号
+            # Frame Number
             frame_label = ttk.Label(col_frame, text="", font=("", 8))
             frame_label.pack()
             self.cand_frame_labels.append(frame_label)
              
-            # 割り当て入力
+            # Assignment Input
             var = tk.StringVar(value=MOUTH_ASSIGNMENT_OPTIONS[0])
             entry = ttk.Combobox(
                 col_frame,
@@ -634,29 +634,29 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
                 widget.bind("<Double-Button-1>", lambda _e, idx=i: self._on_candidate_double_click(idx))
             entry.bind("<FocusIn>", lambda _e, idx=i: self._select_candidate_slot(idx))
          
-        # 凡例
+        # Legend
         legend_frame = ttk.Frame(cand_frame)
         legend_frame.pack(fill=tk.X, pady=(5, 0))
-        ttk.Label(legend_frame, text="各候補の下で口形名を直接選択します", font=("", 9)).pack(side=tk.LEFT)
-        self.selected_slot_var = tk.StringVar(value="選択中の候補: 1")
+        ttk.Label(legend_frame, text="Select mouth shape names directly under each candidate", font=("", 9)).pack(side=tk.LEFT)
+        self.selected_slot_var = tk.StringVar(value="Selected Candidate: 1")
         ttk.Label(legend_frame, textvariable=self.selected_slot_var, font=("", 9)).pack(side=tk.LEFT, padx=(12, 0))
         self.auto_fill_btn = ttk.Button(
             legend_frame,
-            text="候補を自動選出",
+            text="Auto-select Candidates",
             command=self._on_fill_auto_candidates,
             state=tk.DISABLED,
         )
         self.auto_fill_btn.pack(side=tk.RIGHT)
         self.auto_assign_btn = ttk.Button(
             legend_frame,
-            text="候補に口形を自動割当",
+            text="Auto-assign Mouth Shapes to Candidates",
             command=self._on_auto_assign,
             state=tk.DISABLED,
         )
         self.auto_assign_btn.pack(side=tk.RIGHT, padx=(0, 6))
         
         # --- Crop settings ---
-        crop_frame = ttk.LabelFrame(main_frame, text="切り取り範囲（余白を削る）", padding=5)
+        crop_frame = ttk.LabelFrame(main_frame, text="Crop Range (Reduce Margin)", padding=5)
         crop_frame.pack(fill=tk.X, pady=(0, 10))
         
         crop_grid = ttk.Frame(crop_frame)
@@ -669,45 +669,45 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             "right": tk.IntVar(value=DEFAULT_CROP),
         }
         
-        # 上
-        ttk.Label(crop_grid, text="上:").grid(row=0, column=0, sticky=tk.E)
+        # Top
+        ttk.Label(crop_grid, text="Top:").grid(row=0, column=0, sticky=tk.E)
         ttk.Scale(crop_grid, from_=0, to=MAX_CROP, variable=self.crop_vars["top"], 
                   orient=tk.HORIZONTAL, length=100).grid(row=0, column=1)
         self.crop_labels = {}
         self.crop_labels["top"] = ttk.Label(crop_grid, text="0px", width=5)
         self.crop_labels["top"].grid(row=0, column=2)
         
-        # 下
-        ttk.Label(crop_grid, text="下:").grid(row=1, column=0, sticky=tk.E)
+        # Bottom
+        ttk.Label(crop_grid, text="Bottom:").grid(row=1, column=0, sticky=tk.E)
         ttk.Scale(crop_grid, from_=0, to=MAX_CROP, variable=self.crop_vars["bottom"],
                   orient=tk.HORIZONTAL, length=100).grid(row=1, column=1)
         self.crop_labels["bottom"] = ttk.Label(crop_grid, text="0px", width=5)
         self.crop_labels["bottom"].grid(row=1, column=2)
         
-        # 左
-        ttk.Label(crop_grid, text="左:").grid(row=0, column=3, sticky=tk.E, padx=(20, 0))
+        # Left
+        ttk.Label(crop_grid, text="Left:").grid(row=0, column=3, sticky=tk.E, padx=(20, 0))
         ttk.Scale(crop_grid, from_=0, to=MAX_CROP, variable=self.crop_vars["left"],
                   orient=tk.HORIZONTAL, length=100).grid(row=0, column=4)
         self.crop_labels["left"] = ttk.Label(crop_grid, text="0px", width=5)
         self.crop_labels["left"].grid(row=0, column=5)
         
-        # 右
-        ttk.Label(crop_grid, text="右:").grid(row=1, column=3, sticky=tk.E, padx=(20, 0))
+        # Right
+        ttk.Label(crop_grid, text="Right:").grid(row=1, column=3, sticky=tk.E, padx=(20, 0))
         ttk.Scale(crop_grid, from_=0, to=MAX_CROP, variable=self.crop_vars["right"],
                   orient=tk.HORIZONTAL, length=100).grid(row=1, column=4)
         self.crop_labels["right"] = ttk.Label(crop_grid, text="0px", width=5)
         self.crop_labels["right"].grid(row=1, column=5)
 
-        # 自動最適化ボタン
+        # Auto-optimization Button
         auto_crop_frame = ttk.Frame(crop_frame)
         auto_crop_frame.pack(fill=tk.X, pady=(5, 0))
         self.auto_crop_btn = ttk.Button(
-            auto_crop_frame, text="切り抜きを自動調整", command=self._on_auto_crop, state=tk.DISABLED
+            auto_crop_frame, text="Auto-adjust Crop", command=self._on_auto_crop, state=tk.DISABLED
         )
         self.auto_crop_btn.pack(side=tk.RIGHT)
 
         # --- Feather slider ---
-        feather_frame = ttk.LabelFrame(main_frame, text="フェザー幅", padding=5)
+        feather_frame = ttk.LabelFrame(main_frame, text="Feather Width", padding=5)
         feather_frame.pack(fill=tk.X, pady=(0, 10))
         
         self.feather_var = tk.IntVar(value=DEFAULT_FEATHER)
@@ -725,7 +725,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         
         # --- Update button ---
         self.update_btn = ttk.Button(
-            main_frame, text="プレビュー更新", command=self._on_update_preview, state=tk.DISABLED
+            main_frame, text="Update Preview", command=self._on_update_preview, state=tk.DISABLED
         )
         self.update_btn.pack(fill=tk.X, pady=(0, 4))
 
@@ -737,19 +737,19 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         self.live_test_btn = ttk.Button(
             main_frame,
-            text="ライブ試験（口形とマイク入力を確認）",
+            text="Live Test (Check Mouth Shape and Mic Input)",
             command=self._show_live_test_window,
             state=tk.DISABLED,
         )
         self.live_test_btn.pack(fill=tk.X, pady=(0, 2))
         ttk.Label(
             main_frame,
-            text="ライブ試験は、現在のプレビュー結果を使います。",
+            text="The live test uses the current preview results.",
             font=("", 9),
         ).pack(anchor=tk.W, pady=(0, 10))
         
         # --- Preview area ---
-        preview_frame = ttk.LabelFrame(main_frame, text="出力プレビュー", padding=5)
+        preview_frame = ttk.LabelFrame(main_frame, text="Output Preview", padding=5)
         preview_frame.pack(fill=tk.X, pady=(0, 10))
         
         preview_inner = ttk.Frame(preview_frame)
@@ -766,7 +766,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             
             preview_label = ttk.Label(
                 col_frame,
-                text="(未選択)",
+                text="(Unselected)",
                 width=12,
                 anchor=tk.CENTER,
                 relief=tk.SUNKEN,
@@ -783,12 +783,12 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         
         # --- Output button ---
         self.output_btn = ttk.Button(
-            main_frame, text="出力", command=self._on_output, state=tk.DISABLED
+            main_frame, text="Output", command=self._on_output, state=tk.DISABLED
         )
         self.output_btn.pack(fill=tk.X, pady=(0, 10))
         
         # --- Log area ---
-        log_frame = ttk.LabelFrame(main_frame, text="ログ", padding=5)
+        log_frame = ttk.LabelFrame(main_frame, text="Log", padding=5)
         log_frame.pack(fill=tk.BOTH, expand=True)
         
         self.log_text = tk.Text(log_frame, height=5, state=tk.DISABLED, wrap=tk.WORD)
@@ -801,29 +801,29 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self.bind("<KeyPress>", self._on_key_press)
     
     def log(self, message: str):
-        """ログにメッセージを追加（スレッドセーフ）"""
+        """Add message to log (thread-safe)"""
         self.log_queue.put(message)
 
     def _start_busy_state(self, mode: str, detail: str):
-        """進行中インジケーターを開始"""
+        """Start progress indicator"""
         self.busy_mode = mode
-        self.busy_status_var.set(f"処理状態: {mode} - {detail}")
+        self.busy_status_var.set(f"Processing State: {mode} - {detail}")
         self.busy_progress.start(10)
 
     def _update_busy_state(self, detail: str):
-        """進行中インジケーターの文言を更新"""
+        """Update progress indicator text"""
         if not self.busy_mode:
             return
-        self.busy_status_var.set(f"処理状態: {self.busy_mode} - {detail}")
+        self.busy_status_var.set(f"Processing State: {self.busy_mode} - {detail}")
 
-    def _finish_busy_state(self, detail: str = "待機中"):
-        """進行中インジケーターを終了"""
+    def _finish_busy_state(self, detail: str = "Standby"):
+        """Stop progress indicator"""
         self.busy_progress.stop()
         self.busy_mode = ""
-        self.busy_status_var.set(f"処理状態: {detail}")
+        self.busy_status_var.set(f"Processing State: {detail}")
     
     def _poll_logs(self):
-        """ログキューをポーリングしてUIを更新"""
+        """Poll log queue to update UI"""
         while not self.log_queue.empty():
             try:
                 msg = self.log_queue.get_nowait()
@@ -847,7 +847,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self.after(100, self._poll_logs)
 
     def _setup_state_traces(self):
-        """プレビュー再更新が必要になる入力変更を監視"""
+        """Monitor input changes that require preview update"""
         for var in self.cand_vars:
             var.trace_add("write", self._on_assignment_var_changed)
         for var in self.crop_vars.values():
@@ -856,36 +856,36 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
     def _set_preview_state_code(self, code: str):
         mapping = {
-            "empty": "プレビュー未更新",
-            "dirty": "候補変更あり（再更新してください）",
-            "ready": "プレビュー更新済み",
+            "empty": "Preview Not Updated",
+            "dirty": "Candidates changed (please update again)",
+            "ready": "Preview updated",
         }
         self.preview_state_code = code
-        self.preview_state_var.set(mapping.get(code, "プレビュー未更新"))
+        self.preview_state_var.set(mapping.get(code, "Preview Not Updated"))
         self._refresh_workflow_state()
 
     def _refresh_workflow_state(self):
         if self.is_analyzing:
-            self.workflow_state_var.set("状態: 解析中...")
+            self.workflow_state_var.set("State: Analyzing...")
             return
         if not self.video_path:
-            self.workflow_state_var.set("状態: 動画を選択してください")
+            self.workflow_state_var.set("State: Please select a video")
             return
         if not self.unified_size or not self.valid_frames:
-            self.workflow_state_var.set("状態: 動画選択済み / 解析待ち")
+            self.workflow_state_var.set("State: Video Selected / Waiting for Analysis")
             return
 
-        parts = [f"状態: 解析完了 / 候補 {len(self.candidate_frames)}件"]
+        parts = [f"State: Analysis Complete / Candidates {len(self.candidate_frames)}items"]
         if not self.candidate_frames:
-            parts.append("次はプレイヤーで候補を追加")
+            parts.append("Next: Add candidates in player")
         elif self.preview_state_code == "ready":
-            parts.append("プレビュー更新済み")
+            parts.append("Preview updated")
         elif self.preview_state_code == "dirty":
-            parts.append("プレビュー再更新待ち")
+            parts.append("Waiting for preview update")
         else:
-            parts.append("割り当て後にプレビュー更新")
+            parts.append("Update preview after assignment")
         if self.preview_sprites:
-            parts.append("ライブ試験可能")
+            parts.append("Live Test Available")
         self.workflow_state_var.set(" / ".join(parts))
 
     def _on_assignment_var_changed(self, *_args):
@@ -899,7 +899,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self._invalidate_preview(dirty=True)
 
     def _build_player_window(self):
-        """別ウィンドウのプレイヤーUIを構築"""
+        """Build player UI in separate window"""
         self.player_focus_var = tk.BooleanVar(value=True)
         self.player_seek_var = tk.DoubleVar(value=0.0)
         self.player_speed_var = tk.StringVar(value="1.0x")
@@ -922,7 +922,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         self.player_view = ttk.Label(
             self.player_viewport,
-            text="動画を選択してください",
+            text="Please select a video",
             anchor=tk.CENTER,
             relief=tk.SUNKEN,
         )
@@ -931,8 +931,8 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         ttk.Label(
             frame,
             text=(
-                "使い方: 再生/停止やコマ送りで良いフレームを探し、"
-                "『現在フレームを候補へ追加/上書き』で登録します。"
+                "Usage: Find good frames by play/stop or step, "
+                "Register with 'Add/Overwrite Current Frame to Candidates'."
             ),
             font=("", 9),
             wraplength=820,
@@ -944,7 +944,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         ttk.Label(info, textvariable=self.player_status_var, font=("", 9)).pack(side=tk.LEFT)
         ttk.Checkbutton(
             info,
-            text="口元拡大",
+            text="Zoom Mouth",
             variable=self.player_focus_var,
             command=lambda: self._show_player_frame(self.player_current_frame_idx),
         ).pack(side=tk.RIGHT)
@@ -969,7 +969,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self.prev_frame_btn.pack(side=tk.LEFT)
 
         self.play_btn = ttk.Button(
-            controls, text="再生", command=self._toggle_player, state=tk.DISABLED
+            controls, text="Play", command=self._toggle_player, state=tk.DISABLED
         )
         self.play_btn.pack(side=tk.LEFT, padx=4)
 
@@ -980,7 +980,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         self.add_candidate_btn = ttk.Button(
             controls,
-            text="現在フレームを候補へ追加/上書き",
+            text="Add/Overwrite Current Frame to Candidates",
             command=self._on_add_current_frame,
             state=tk.DISABLED,
         )
@@ -988,7 +988,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         self.remove_candidate_btn = ttk.Button(
             controls,
-            text="選択候補を削除",
+            text="Remove Selected Candidate",
             command=self._on_remove_selected_candidate,
             state=tk.DISABLED,
         )
@@ -996,7 +996,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         self.clear_candidates_btn = ttk.Button(
             controls,
-            text="候補クリア",
+            text="Clear Candidates",
             command=self._on_clear_candidates,
             state=tk.DISABLED,
         )
@@ -1005,7 +1005,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         extras = ttk.Frame(frame)
         extras.pack(fill=tk.X, pady=(8, 0))
 
-        ttk.Label(extras, text="速度").pack(side=tk.LEFT)
+        ttk.Label(extras, text="Speed").pack(side=tk.LEFT)
         self.player_speed_combo = ttk.Combobox(
             extras,
             width=8,
@@ -1016,7 +1016,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self.player_speed_combo.pack(side=tk.LEFT, padx=(4, 12))
         self.player_speed_combo.bind("<<ComboboxSelected>>", lambda _e=None: self._on_player_speed_change())
 
-        ttk.Label(extras, text="フレーム").pack(side=tk.LEFT)
+        ttk.Label(extras, text="Frame").pack(side=tk.LEFT)
         self.player_frame_entry = ttk.Entry(
             extras,
             width=8,
@@ -1027,7 +1027,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         self.jump_frame_btn = ttk.Button(
             extras,
-            text="移動",
+            text="Jump",
             command=self._jump_to_frame,
             state=tk.DISABLED,
         )
@@ -1035,7 +1035,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         hint = ttk.Label(
             frame,
-            text="ショートカット: Space=再生/停止  J/K・←/→=コマ送り  候補ダブルクリック=現在フレーム登録",
+            text="Shortcuts: Space=Play/Stop  J/K/Left/Right=Step  Double-click candidate=Register current frame",
             font=("", 9),
         )
         hint.pack(anchor=tk.W, pady=(8, 0))
@@ -1058,9 +1058,9 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             pass
 
     def _build_live_test_window(self):
-        """口素材の簡易ライブ試験ウィンドウを構築"""
+        """Build simple live test window for mouth materials"""
         self.live_audio_device_var = tk.StringVar(value="")
-        self.live_status_var = tk.StringVar(value="停止中")
+        self.live_status_var = tk.StringVar(value="Stopped")
         self.live_level_var = tk.DoubleVar(value=0.0)
         self.live_shape_var = tk.StringVar(value="closed")
 
@@ -1078,8 +1078,8 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         ttk.Label(
             frame,
             text=(
-                "この試験では、プレビュー更新済みの口素材を使って\n"
-                "マイク入力で open / closed / half / e / u の切替を確認します。"
+                "In this test, using the updated preview mouth materials\n"
+                "switch open / closed / half / e / u with mic input."
             ),
             font=("", 9),
             justify=tk.LEFT,
@@ -1088,7 +1088,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         top = ttk.Frame(frame)
         top.pack(fill=tk.X)
 
-        ttk.Label(top, text="オーディオ入力").pack(side=tk.LEFT)
+        ttk.Label(top, text="Audio Input").pack(side=tk.LEFT)
         self.live_audio_combo = ttk.Combobox(
             top,
             state="readonly",
@@ -1100,7 +1100,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         self.live_audio_refresh_btn = ttk.Button(
             top,
-            text="再読込",
+            text="Reload",
             command=self._refresh_live_audio_devices,
         )
         self.live_audio_refresh_btn.pack(side=tk.LEFT)
@@ -1110,7 +1110,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         self.live_start_btn = ttk.Button(
             ctrl,
-            text="試験開始",
+            text="Start Test",
             command=self._toggle_live_test,
             state=tk.DISABLED,
         )
@@ -1122,7 +1122,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         meter_frame = ttk.Frame(frame)
         meter_frame.pack(fill=tk.X, pady=(0, 8))
-        ttk.Label(meter_frame, text="入力レベル").pack(side=tk.LEFT)
+        ttk.Label(meter_frame, text="Input Level").pack(side=tk.LEFT)
         self.live_level_bar = ttk.Progressbar(
             meter_frame,
             variable=self.live_level_var,
@@ -1133,7 +1133,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         self.live_preview_label = ttk.Label(
             frame,
-            text="先にメイン画面でプレビュー更新して口素材を用意してください",
+            text="Please update preview on main screen first to prepare mouth materials",
             anchor=tk.CENTER,
             relief=tk.SUNKEN,
         )
@@ -1141,12 +1141,12 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         ttk.Label(
             frame,
-            text="先にメイン画面でプレビュー更新しておくと、ここですぐ確認できます。",
+            text="If you update the preview on the main screen first, you can verify it here immediately.",
             font=("", 9),
         ).pack(anchor=tk.W, pady=(8, 0))
 
         if not _HAS_SOUNDDEVICE:
-            self.live_status_var.set("sounddevice が無いため利用不可")
+            self.live_status_var.set("Not available (sounddevice missing)")
         self._refresh_live_audio_devices()
         self._hide_live_test_window()
 
@@ -1169,7 +1169,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             pass
 
     def _refresh_live_audio_devices(self):
-        """ライブ試験用のオーディオ入力一覧を更新"""
+        """Update audio input list for live test"""
         self._live_audio_items = list_input_devices() if _HAS_SOUNDDEVICE else []
         values = [str(item.get("display", "")) for item in self._live_audio_items]
         self.live_audio_combo["values"] = values
@@ -1188,11 +1188,11 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self.live_test_btn.configure(state=(tk.NORMAL if has_sprites else tk.DISABLED))
         self.live_start_btn.configure(state=(tk.NORMAL if can_start else tk.DISABLED))
         if not has_sprites:
-            self.live_status_var.set("先にプレビュー更新が必要です")
+            self.live_status_var.set("Preview update is required first")
         elif not has_audio:
-            self.live_status_var.set("オーディオ入力デバイスが見つかりません")
+            self.live_status_var.set("Audio input device not found")
         elif self._live_stream is None:
-            self.live_status_var.set("停止中")
+            self.live_status_var.set("Stopped")
         self._refresh_workflow_state()
 
     def _selected_live_device_item(self) -> Optional[dict]:
@@ -1234,7 +1234,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         if sprites is None:
             self.live_preview_label.configure(
                 image="",
-                text="先にメイン画面でプレビュー更新して口素材を用意してください",
+                text="Please update preview on main screen first to prepare mouth materials",
             )
             self.live_shape_var.set("-")
             self._refresh_live_test_button_state()
@@ -1282,14 +1282,14 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
     def _start_live_test(self):
         sprites = self._resolve_live_test_sprites()
         if sprites is None:
-            messagebox.showwarning("警告", "先にメイン画面でプレビュー更新してからライブ試験を開始してください。")
+            messagebox.showwarning("Warning", "Please update preview on main screen before starting live test.")
             return
         if not _HAS_SOUNDDEVICE:
-            messagebox.showerror("エラー", "sounddevice が必要です")
+            messagebox.showerror("Error", "sounddevice is required")
             return
         device_item = self._selected_live_device_item()
         if device_item is None:
-            messagebox.showwarning("警告", "オーディオ入力デバイスを選択してください")
+            messagebox.showwarning("Warning", "Please select an audio input device")
             return
 
         raw_spec = str(device_item.get("spec", "")).strip()
@@ -1310,7 +1310,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             resolved_index = resolution.get("resolved_index")
             if resolved_index is None:
                 raise RuntimeError(
-                    f"入力デバイスを解決できません: {device_item.get('display', '')}"
+                    f"Could not resolve input device: {device_item.get('display', '')}"
                 )
             apply_state = apply_audio_resolution_for_current_process(resolution)
             dev = sd.query_devices(resolved_index, "input")  # type: ignore[union-attr]
@@ -1323,17 +1323,17 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         except Exception as e:
             if raw_spec.startswith("pa:"):
                 try:
-                    self.log(f"[audio] ライブ試験 primary 解決失敗。default-source fallback を試します: {e}")
+                    self.log(f"[audio] Live test primary resolution failed. Trying default-source fallback: {e}")
                     resolution, apply_state, device_idx, samplerate = _resolve_live_input(
                         prefer_default_source=True,
                     )
                 except Exception as fallback_error:
                     cleanup_audio_device_resolution(resolution or {}, apply_state)
-                    messagebox.showerror("エラー", f"入力デバイスを開けません: {fallback_error}")
+                    messagebox.showerror("Error", f"Could not open input device: {fallback_error}")
                     return
             else:
                 cleanup_audio_device_resolution(resolution or {}, apply_state)
-                messagebox.showerror("エラー", f"入力デバイスを開けません: {e}")
+                messagebox.showerror("Error", f"Could not open input device: {e}")
                 return
 
         while not self._live_feat_q.empty():
@@ -1379,7 +1379,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         except Exception as e:
             if raw_spec.startswith("pa:") and not bool((resolution or {}).get("needs_default_source_switch")):
                 try:
-                    self.log(f"[audio] ライブ試験 stream open 失敗。default-source fallback を試します: {e}")
+                    self.log(f"[audio] Live test stream open failed. Trying default-source fallback: {e}")
                     resolution, apply_state, device_idx, samplerate = _resolve_live_input(
                         prefer_default_source=True,
                     )
@@ -1396,21 +1396,21 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
                 except Exception as fallback_error:
                     cleanup_audio_device_resolution(resolution or {}, apply_state)
                     self._live_stream = None
-                    messagebox.showerror("エラー", f"ライブ試験開始に失敗しました: {fallback_error}")
+                    messagebox.showerror("Error", f"Failed to start live test: {fallback_error}")
                     return
             else:
                 cleanup_audio_device_resolution(resolution or {}, apply_state)
                 self._live_stream = None
-                messagebox.showerror("エラー", f"ライブ試験開始に失敗しました: {e}")
+                messagebox.showerror("Error", f"Failed to start live test: {e}")
                 return
 
         self._live_audio_resolution = resolution
         self._live_audio_apply_state = apply_state
-        self.live_status_var.set(f"実行中: {self.live_audio_device_var.get()}")
-        self.live_start_btn.configure(text="停止")
+        self.live_status_var.set(f"Running: {self.live_audio_device_var.get()}")
+        self.live_start_btn.configure(text="Stop")
         self._refresh_live_test_button_state()
         self._schedule_live_test_tick()
-        self.log(f"ライブ試験開始: device={device_idx}")
+        self.log(f"Live test started: device={device_idx}")
 
     def _stop_live_test(self):
         if self._live_job:
@@ -1435,9 +1435,9 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         )
         self._live_audio_resolution = None
         self._live_audio_apply_state = None
-        self.log("ライブ試験停止")
+        self.log("Stop live test")
         self.live_level_var.set(0.0)
-        self.live_start_btn.configure(text="試験開始")
+        self.live_start_btn.configure(text="Start Test")
         self._live_audio_state = None
         self._update_live_test_preview("closed")
         self._refresh_live_test_button_state()
@@ -1538,23 +1538,23 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             self._update_live_test_preview(self._resolve_live_test_shape())
 
     def _update_candidate_slot_highlight(self):
-        """選択中の候補スロット表示を更新"""
-        self.selected_slot_var.set(f"選択中の候補: {self.selected_candidate_idx + 1}")
+        """Update selected candidate slot display"""
+        self.selected_slot_var.set(f"Selected Candidate: {self.selected_candidate_idx + 1}")
         for i in range(CANDIDATE_COUNT):
             selected = (i == self.selected_candidate_idx)
             relief = tk.SOLID if selected else tk.SUNKEN
             self.cand_labels[i].configure(relief=relief)
-            title = f"[候補{i+1}]" if selected else f"候補{i+1}"
+            title = f"[Candidate{i+1}]" if selected else f"Candidate{i+1}"
             self.cand_slot_titles[i].configure(text=title)
 
     def _select_candidate_slot(self, idx: int):
-        """候補スロットを選択"""
+        """Select candidate slot"""
         idx = max(0, min(int(idx), CANDIDATE_COUNT - 1))
         self.selected_candidate_idx = idx
         self._update_candidate_slot_highlight()
 
     def _focus_candidate_slot(self, idx: int):
-        """候補スロットを選択し、入力フォーカスも当てる"""
+        """Select candidate slot and focus"""
         self._select_candidate_slot(idx)
         if 0 <= idx < len(self.cand_entries):
             try:
@@ -1564,7 +1564,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
                 pass
 
     def _on_candidate_double_click(self, idx: int):
-        """候補スロットをダブルクリックしたら現在フレームを登録"""
+        """Register current frame on double-clicking candidate slot"""
         self._select_candidate_slot(idx)
         if self.add_candidate_btn.cget("state") == tk.NORMAL:
             self._on_add_current_frame()
@@ -1580,7 +1580,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self.jump_frame_btn.configure(state=state)
 
     def _stop_player(self):
-        """プレイヤー再生を停止"""
+        """Stop player playback"""
         self.player_playing = False
         if self.player_job:
             try:
@@ -1588,7 +1588,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             except Exception:
                 pass
             self.player_job = None
-        self.play_btn.configure(text="再生")
+        self.play_btn.configure(text="Play")
 
     def _close_player_capture(self):
         if self._player_cap:
@@ -1603,7 +1603,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         return self._player_cap
 
     def _load_player_metadata(self):
-        """プレイヤー用の動画情報を読み込む"""
+        """Load video info for player"""
         self.player_total_frames = 0
         self.player_fps = 30.0
         if not self.video_path:
@@ -1612,7 +1612,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 
         cap = cv2.VideoCapture(self.video_path)
         if not cap.isOpened():
-            self.player_view.configure(text="動画を開けません", image="")
+            self.player_view.configure(text="Cannot open video", image="")
             self._set_player_enabled(False)
             return
 
@@ -1629,7 +1629,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             self._set_player_enabled(False)
 
     def _show_player_frame(self, frame_idx: int):
-        """指定フレームをプレイヤーに表示"""
+        """Show specified frame in player"""
         if not self.video_path or self.player_total_frames <= 0:
             return
 
@@ -1641,7 +1641,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         cap.set(cv2.CAP_PROP_POS_FRAMES, float(frame_idx))
         ok, frame = cap.read()
         if not ok or frame is None:
-            self.log(f"警告: フレーム読込失敗 F:{frame_idx}")
+            self.log(f"Warning: Frame read failure F:{frame_idx}")
             return
 
         self.player_current_frame_idx = frame_idx
@@ -1683,11 +1683,11 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             return 1.0
 
     def _on_player_speed_change(self):
-        """速度変更後の表示更新"""
+        """Update display after speed change"""
         if self.player_playing:
             self._stop_player()
             self.player_playing = True
-            self.play_btn.configure(text="停止")
+            self.play_btn.configure(text="Stop")
             self._schedule_player_tick()
 
     def _on_player_seek(self, value: str):
@@ -1702,7 +1702,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             self._show_player_frame(idx)
 
     def _step_player(self, delta: int):
-        """1フレーム単位で移動"""
+        """Step by 1 frame"""
         if self.player_total_frames <= 0:
             return
         self._stop_player()
@@ -1722,7 +1722,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self.player_job = self.after(delay_ms, self._schedule_player_tick)
 
     def _toggle_player(self):
-        """再生/停止切り替え"""
+        """Toggle Play/Stop"""
         if self.player_total_frames <= 0:
             return
         if self.player_playing:
@@ -1730,25 +1730,25 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             return
 
         self.player_playing = True
-        self.play_btn.configure(text="停止")
+        self.play_btn.configure(text="Stop")
         self._schedule_player_tick()
 
     def _jump_to_frame(self):
-        """フレーム番号を直接入力して移動"""
+        """Jump by typing frame number directly"""
         if self.player_total_frames <= 0:
             return
         self._stop_player()
         try:
             idx = int(str(self.player_frame_var.get()).strip())
         except Exception:
-            messagebox.showwarning("警告", "フレーム番号は整数で入力してください")
+            messagebox.showwarning("Warning", "Please enter an integer for the frame number")
             self.player_frame_var.set(str(self.player_current_frame_idx))
             return
         idx = max(0, min(idx, self.player_total_frames - 1))
         self._show_player_frame(idx)
 
     def _on_key_press(self, event):
-        """プレイヤーショートカット"""
+        """Player shortcuts"""
         if self.player_total_frames <= 0:
             return
 
@@ -1793,39 +1793,39 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self._refresh_workflow_state()
 
     def _refresh_candidates_ui(self):
-        """候補一覧サムネイルを再生成して表示"""
+        """Regenerate and display candidate thumbnails"""
         self._thumbnail_patches = self._generate_thumbnail_patches()
         self._create_thumbnail_images()
         self._update_candidates_ui()
         self._refresh_candidate_buttons()
 
     def _on_add_current_frame(self):
-        """現在表示中のフレームを候補へ追加/上書き"""
+        """Add/overwrite current frame to candidates"""
         if not self.extractor or not self.valid_frames:
-            messagebox.showwarning("警告", "先に解析を実行してください")
+            messagebox.showwarning("Warning", "Please run analysis first")
             return
 
         mf = self._mouth_frame_by_idx.get(self.player_current_frame_idx)
         if mf is None or not mf.valid:
             messagebox.showwarning(
-                "警告",
-                "現在フレームには有効な口トラックがありません。別フレームを選んでください。",
+                "Warning",
+                "Current frame does not have a valid mouth track. Please select another frame.",
             )
             return
 
         target_idx = min(self.selected_candidate_idx, len(self.candidate_frames))
         if target_idx >= CANDIDATE_COUNT:
-            messagebox.showwarning("警告", f"候補は最大{CANDIDATE_COUNT}枚です")
+            messagebox.showwarning("Warning", f"Candidates max is {CANDIDATE_COUNT} frames")
             return
 
         if target_idx < len(self.candidate_frames):
             self.candidate_frames[target_idx] = mf
             self.cand_vars[target_idx].set(MOUTH_ASSIGNMENT_OPTIONS[0])
-            self.log(f"候補を上書き: 候補{target_idx+1} <- F:{mf.frame_idx}")
+            self.log(f"Overwrote candidate: Candidate {target_idx+1} <- F:{mf.frame_idx}")
         else:
             self.candidate_frames.append(mf)
             target_idx = len(self.candidate_frames) - 1
-            self.log(f"候補を追加: 候補{target_idx+1} <- F:{mf.frame_idx}")
+            self.log(f"Added candidate: Candidate {target_idx+1} <- F:{mf.frame_idx}")
 
         next_idx = min(target_idx + 1, CANDIDATE_COUNT - 1)
         self._focus_candidate_slot(next_idx)
@@ -1833,43 +1833,43 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self._refresh_candidates_ui()
 
     def _on_remove_selected_candidate(self):
-        """選択候補を削除"""
+        """Remove Selected Candidate"""
         if not self.candidate_frames:
             return
         idx = min(self.selected_candidate_idx, len(self.candidate_frames) - 1)
         removed = self.candidate_frames.pop(idx)
         self._clear_assignments()
-        self.log(f"候補を削除: 候補{idx+1} / F:{removed.frame_idx}")
+        self.log(f"Removed candidate: Candidate {idx+1} / F:{removed.frame_idx}")
         self._select_candidate_slot(max(0, min(idx, len(self.candidate_frames))))
         self._invalidate_preview(dirty=True)
         self._refresh_candidates_ui()
 
     def _on_clear_candidates(self):
-        """候補をすべてクリア"""
+        """Clear all candidates"""
         self.candidate_frames = []
         self._clear_assignments()
         self._clear_candidates()
         self._clear_preview("empty")
         self._refresh_candidate_buttons()
-        self.log("候補をクリアしました")
+        self.log("Candidates cleared")
     
     def _on_select_video(self):
-        """動画ファイルを選択"""
+        """Select Video File"""
         if sys.platform == "darwin":  # Mac
-            path = filedialog.askopenfilename(title="動画ファイルを選択")
+            path = filedialog.askopenfilename(title="Select Video File")
         else:  # Windows/Linux
             path = filedialog.askopenfilename(
-                title="動画ファイルを選択",
+                title="Select Video File",
                 filetypes=[
-                    ("動画ファイル", "*.mp4 *.avi *.mov *.mkv *.webm"),
-                    ("すべてのファイル", "*.*"),
+                    ("Video File", "*.mp4 *.avi *.mov *.mkv *.webm"),
+                    ("All Files", "*.*"),
                 ],
             )
         if path:
             self._set_video(path)
     
     def _on_drop_video(self, event):
-        """ドラッグ&ドロップで動画を設定"""
+        """Set video by drag & drop"""
         path = event.data
         if path.startswith("{") and path.endswith("}"):
             path = path[1:-1]
@@ -1878,7 +1878,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             self._set_video(path)
     
     def _set_video(self, path: str):
-        """動画パスを設定"""
+        """Set video path"""
         self._stop_player()
         self.video_path = path
         self.video_var.set(path)
@@ -1908,15 +1908,15 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         if self.player_total_frames > 0:
             self._show_player_frame(0)
         else:
-            self.player_view.configure(text="動画を開けません", image="")
+            self.player_view.configure(text="Cannot open video", image="")
         
-        self.log(f"動画を選択: {os.path.basename(path)}")
+        self.log(f"Video selected: {os.path.basename(path)}")
         if self.player_total_frames > 0:
-            self.log("動画選択後に自動で解析を開始します...")
+            self.log("Automatically starting analysis after video selection...")
             self.after(50, self._on_analyze)
     
     def _clear_candidates(self):
-        """候補表示をクリア"""
+        """Clear candidates display"""
         self.candidate_images = []
         self._suspend_preview_traces = True
         try:
@@ -1929,12 +1929,12 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self._update_candidate_slot_highlight()
     
     def _clear_preview(self, state_code: str = "empty"):
-        """プレビューをクリア"""
+        """Clear preview"""
         self._stop_live_test()
         self.preview_images = {}
         self.preview_sprites = {}
         for name, label in self.preview_labels.items():
-            label.configure(image="", text="(未選択)")
+            label.configure(image="", text="(Unselected)")
             self.out_frame_labels[name].configure(text="")
         self.output_btn.configure(state=tk.DISABLED)
         self._update_live_test_preview("closed")
@@ -1945,9 +1945,9 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self._clear_preview(next_state)
     
     def _on_analyze(self):
-        """解析を実行"""
+        """Run Analysis"""
         if not self.video_path:
-            messagebox.showwarning("警告", "動画ファイルを選択してください")
+            messagebox.showwarning("Warning", "Please select a video file")
             return
         
         if self.is_analyzing:
@@ -1955,7 +1955,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         
         self.is_analyzing = True
         self._refresh_workflow_state()
-        self._start_busy_state("解析中", "口位置を解析しています。しばらくお待ちください")
+        self._start_busy_state("Analyzing", "Analyzing mouth positions. Please wait...")
         self.analyze_btn.configure(state=tk.DISABLED)
         self.update_btn.configure(state=tk.DISABLED)
         self.output_btn.configure(state=tk.DISABLED)
@@ -1970,9 +1970,9 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         thread.start()
     
     def _analyze_worker(self):
-        """解析ワーカースレッド"""
+        """Analysis worker thread"""
         try:
-            self.log("解析を開始...")
+            self.log("Starting analysis...")
             
             self.extractor = MouthSpriteExtractor(self.video_path)
             self.extractor.analyze(callback=self.log)
@@ -1984,11 +1984,11 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             }
              
             if len(valid_frames) == 0:
-                self.log("エラー: 有効なフレームがありません")
-                self.after(0, lambda: self._finish_busy_state("有効なフレームが見つかりませんでした"))
+                self.log("Error: No valid frames")
+                self.after(0, lambda: self._finish_busy_state("No valid frames found"))
                 return
              
-            # 統一サイズを計算（全有効フレームから）
+            # Calculate unified size (from all valid frames)
             if valid_frames:
                 max_w = max(mf.width for mf in valid_frames)
                 max_h = max(mf.height for mf in valid_frames)
@@ -1997,16 +1997,16 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
                     ensure_even_ge2(int(max_h * 1.1)),
                 )
             
-            self.log("解析完了。プレイヤーで候補フレームを手動追加してください。")
-            self.log("必要なら『候補を自動選出』で従来の自動抽出も使えます。")
-            self.after(0, lambda: self._finish_busy_state("解析完了"))
+            self.log("Analysis complete. Please manually add candidate frames in the player.")
+            self.log("If necessary, you can also use traditional auto-extraction via 'Auto-select Candidates'.")
+            self.after(0, lambda: self._finish_busy_state("Analysis Complete"))
             self.after(0, lambda: self._enable_manual_pick_controls(True))
             self.after(0, lambda: self.auto_fill_btn.configure(state=tk.NORMAL))
             self.after(0, lambda: self._show_player_frame(self.player_current_frame_idx))
               
         except Exception as e:
-            self.log(f"エラー: {e}")
-            self.after(0, lambda: self._finish_busy_state("解析エラー"))
+            self.log(f"Error: {e}")
+            self.after(0, lambda: self._finish_busy_state("Analysis error"))
             traceback.print_exc()
         
         finally:
@@ -2015,17 +2015,17 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             self.after(0, self._refresh_workflow_state)
     
     def _get_video_capture(self) -> cv2.VideoCapture:
-        """キャッシュされたVideoCaptureを取得"""
+        """Get cached VideoCapture"""
         if self._cached_cap is None or not self._cached_cap.isOpened():
             self._cached_cap = cv2.VideoCapture(self.video_path)
         return self._cached_cap
     
     def _generate_thumbnail_patches(self) -> List[Optional[np.ndarray]]:
-        """候補フレームのサムネイル用numpy配列を生成（ワーカースレッド用）"""
+        """Generate numpy arrays for candidate frame thumbnails (for worker thread)"""
         if not self.candidate_frames or not self.unified_size:
             return []
 
-        # ワーカースレッドでは独自のVideoCaptureを使用（スレッドセーフ）
+        # Use independent VideoCapture in worker thread (thread-safe)
         cap = cv2.VideoCapture(self.video_path)
         if not cap.isOpened():
             return []
@@ -2041,7 +2041,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
                     patches.append(None)
                     continue
 
-                # 正規化空間に変換（numpy配列のみ）
+                # Convert to normalized space (numpy array only)
                 patch = warp_frame_to_norm(frame, mf.quad, unified_w, unified_h)
                 patches.append(patch)
         finally:
@@ -2050,7 +2050,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         return patches
 
     def _create_thumbnail_images(self):
-        """numpy配列からPhotoImageを生成（UIスレッドで実行）"""
+        """Generate PhotoImage from numpy array (executed in UI thread)"""
         self.candidate_images = []
         patches = getattr(self, '_thumbnail_patches', [])
 
@@ -2058,15 +2058,15 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             if patch is None:
                 self.candidate_images.append(None)
             else:
-                # PhotoImageはUIスレッドで生成
+                # PhotoImage is generated in UI thread
                 photo = numpy_to_photoimage(patch, THUMB_SIZE)
                 self.candidate_images.append(photo)
 
-        # メモリ解放
+        # Release memory
         self._thumbnail_patches = []
     
     def _update_candidates_ui(self):
-        """候補UIを更新"""
+        """Update Candidates UI"""
         for i in range(CANDIDATE_COUNT):
             if i >= len(self.candidate_frames):
                 self.cand_labels[i].configure(image="", text="")
@@ -2078,7 +2078,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self._update_candidate_slot_highlight()
 
     def _build_auto_candidates(self) -> List[MouthFrameInfo]:
-        """従来ロジックで自動候補を構築"""
+        """Build auto candidates using traditional logic"""
         if not self.extractor:
             return []
 
@@ -2107,15 +2107,15 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
                 if picked >= count:
                     break
 
-        pick_by_score(heights, 2, maximize=True, label="open候補")
-        pick_by_score(heights, 2, maximize=False, label="closed候補")
+        pick_by_score(heights, 2, maximize=True, label="open candidate")
+        pick_by_score(heights, 2, maximize=False, label="closed candidate")
 
         median_h = np.median(heights)
         half_scores = -np.abs(heights - median_h)
-        pick_by_score(half_scores, 2, maximize=True, label="half候補")
+        pick_by_score(half_scores, 2, maximize=True, label="half candidate")
 
-        pick_by_score(aspect_ratios, 2, maximize=True, label="e候補")
-        pick_by_score(widths, 2, maximize=False, label="u候補")
+        pick_by_score(aspect_ratios, 2, maximize=True, label="e candidate")
+        pick_by_score(widths, 2, maximize=False, label="u candidate")
 
         preselected = {mf.frame_idx for mf, _ in candidates}
         opening_seq = pick_opening_sequence(
@@ -2124,37 +2124,37 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             window=OPENING_SEQ_COUNT,
         )
         if opening_seq:
-            candidates.extend((mf, "opening連続") for mf in opening_seq)
+            candidates.extend((mf, "opening sequence") for mf in opening_seq)
 
         self.log(
-            "自動候補: open候補2枚, closed候補2枚, half候補2枚, "
-            "e候補2枚, u候補2枚, 開き始め連続"
-            f"{len(opening_seq)}枚"
+            "Auto Candidate: open candidate x2, closed candidate x2, half candidate x2, "
+            "e candidate x2, u candidate x2, Opening sequence "
+            f"{len(opening_seq)} items"
         )
         return [mf for mf, _ in candidates][:CANDIDATE_COUNT]
 
     def _on_fill_auto_candidates(self):
-        """従来の自動候補抽出を現在候補へ流し込む"""
+        """Apply traditional auto candidate extraction to current candidates"""
         if not self.extractor or not self.valid_frames:
-            messagebox.showwarning("警告", "先に解析を実行してください")
+            messagebox.showwarning("Warning", "Please run analysis first")
             return
         self._clear_assignments()
         self.candidate_frames = self._build_auto_candidates()
         self._select_candidate_slot(0)
         self._clear_preview("empty")
         self._refresh_candidates_ui()
-        self.log(f"候補を自動選出: {len(self.candidate_frames)} 件セットしました")
+        self.log(f"Auto-select Candidates: {len(self.candidate_frames)} items set")
 
     def _on_auto_assign(self):
-        """現在候補に対して自動割り当てを実行"""
+        """Execute auto-assignment for current candidates"""
         if not self.candidate_frames or not self.unified_size:
-            messagebox.showwarning("警告", "候補がまだありません。プレイヤーで追加するか、「候補を自動選出」を使ってください。")
+            messagebox.showwarning("Warning", "No candidates yet. Please add them in the player or use "Auto-select Candidates".")
             return
 
-        self.log("口形の自動割り当て処理中...")
+        self.log("Processing auto-assignment of mouth shapes...")
         cap = cv2.VideoCapture(self.video_path)
         if not cap.isOpened():
-            messagebox.showerror("エラー", "動画を開けませんでした")
+            messagebox.showerror("Error", "Could not open video")
             return
         try:
             self._run_auto_assign_internal(cap)
@@ -2162,29 +2162,29 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             cap.release()
     
     def _on_update_preview(self):
-        """プレビューを更新"""
+        """Update preview"""
         if not self.candidate_frames or not self.unified_size:
-            messagebox.showwarning("警告", "候補がまだありません。プレイヤーで追加するか、「候補を自動選出」を使ってください。")
+            messagebox.showwarning("Warning", "No candidates yet. Please add them in the player or use "Auto-select Candidates".")
             return
         
-        # 割り当てを解析
+        # Analyze assignments
         assignments: Dict[str, int] = {}
         for i, var in enumerate(self.cand_vars):
             val = var.get().strip()
             if val in ("", MOUTH_ASSIGNMENT_OPTIONS[0]):
                 continue
             if i >= len(self.candidate_frames):
-                self.log(f"警告: 候補が存在しない候補{i+1}は無視します")
+                self.log(f"Warning: Candidate slot does not exist {i+1}")
                 continue
             if val in assignments:
-                self.log(f"警告: {val} が重複しています")
+                self.log(f"Warning: {val} is duplicated")
             assignments[val] = i
         
         if len(assignments) == 0:
-            messagebox.showwarning("警告", "口形の割り当てがありません。open / closed / half / e / u を選んでください。")
+            messagebox.showwarning("Warning", "No mouth shape assignments. Please choose open / closed / half / e / u.")
             return
         
-        # 取得パラメータ
+        # Get parameters
         crop_top = self.crop_vars["top"].get()
         crop_bottom = self.crop_vars["bottom"].get()
         crop_left = self.crop_vars["left"].get()
@@ -2204,14 +2204,14 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             if not ok or frame is None:
                 continue
             
-            # スプライト抽出
+            # Extract sprites
             rgba = extract_sprite_with_crop(
                 frame, mf.quad, unified_w, unified_h,
                 crop_top, crop_bottom, crop_left, crop_right, feather_px
             )
             self.preview_sprites[name] = rgba
             
-            # プレビュー表示
+            # Preview display
             composited = composite_on_checkerboard(rgba)
             photo = numpy_to_photoimage(composited, PREVIEW_SIZE, color_order="RGB")
             if photo:
@@ -2223,56 +2223,56 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
         self.live_test_btn.configure(state=tk.NORMAL)
         self._set_preview_state_code("ready")
         self._update_live_test_preview(self._resolve_live_test_shape())
-        self.log(f"プレビュー更新完了 ({len(self.preview_sprites)}枚)")
+        self.log(f"Update PreviewComplete ({len(self.preview_sprites)} frames)")
 
     def _run_auto_assign_internal(self, cap: cv2.VideoCapture):
         """
-        自動割り当ての内部処理（ワーカースレッドから呼び出し可能）
+        Internal auto-assignment process (callable from worker thread)
 
         Args:
-            cap: 開いているVideoCapture（呼び出し元で管理）
+            cap: Open VideoCapture (managed by caller)
         """
         if not self.candidate_frames or not self.unified_size:
             return
 
         unified_w, unified_h = self.unified_size
 
-        # 特徴量アナライザと分類器を初期化
+        # Initialize feature analyzer and classifier
         analyzer = MouthFeatureAnalyzer((unified_w, unified_h))
         classifier = MouthAutoClassifier()
 
-        # 各候補フレームの特徴量を計算
+        # Calculate features for each candidate frame
         for mf in self.candidate_frames:
             cap.set(cv2.CAP_PROP_POS_FRAMES, float(mf.frame_idx))
             ok, frame = cap.read()
             if not ok or frame is None:
                 continue
 
-            # 正規化パッチを生成
+            # Generate normalized patch
             patch = warp_frame_to_norm(frame, mf.quad, unified_w, unified_h)
 
-            # 特徴量を抽出
+            # Extract features
             features = analyzer.analyze_frame(patch)
 
-            # MouthFrameInfoに特徴量を設定
+            # Set features in MouthFrameInfo
             mf.inner_darkness = features.inner_darkness
             mf.opening_ratio = features.opening_ratio
             mf.horizontal_stretch = features.horizontal_stretch
             mf.vertical_compression = features.vertical_compression
             mf.lip_curvature = features.lip_curvature
 
-        # 自動分類を実行
+        # Execute auto-classification
         selected = classifier.auto_select_5_types(self.candidate_frames)
 
         if not selected:
-            self.log("警告: 有効なフレームが不足しています")
+            self.log("Warning: Insufficient valid frames")
             return
 
-        # 選択結果をUIに反映
-        # 候補フレームのインデックスマップを作成
+        # Reflect selection results to UI
+        # Create index map of candidate frames
         frame_to_cand_idx = {mf.frame_idx: i for i, mf in enumerate(self.candidate_frames)}
 
-        # 割り当てをクリア
+        # Clear assignments
         self.after(0, self._clear_assignments)
 
         for type_name, frame_idx in selected.items():
@@ -2280,12 +2280,12 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
                 cand_idx = frame_to_cand_idx[frame_idx]
                 if type_name in MOUTH_SHAPES and cand_idx < len(self.cand_vars):
                     self.after(0, lambda idx=cand_idx, name=type_name: self.cand_vars[idx].set(name))
-                    self.log(f"  {type_name} -> 候補{cand_idx+1} (F:{frame_idx})")
+                    self.log(f"  {type_name} -> Candidate{cand_idx+1} (F:{frame_idx})")
 
-        self.log("自動割り当て完了")
+        self.log("Auto-assignment complete")
 
     def _clear_assignments(self):
-        """割り当て入力をクリア"""
+        """Clear assignment input"""
         self._suspend_preview_traces = True
         try:
             for var in self.cand_vars:
@@ -2294,41 +2294,41 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             self._suspend_preview_traces = False
 
     def _on_auto_crop(self):
-        """自動切り抜きパラメータ最適化をバックグラウンドで実行"""
+        """Run auto-crop parameter optimization in background"""
         if self.is_analyzing:
             return
         if not self.candidate_frames or not self.unified_size:
-            messagebox.showwarning("警告", "先に解析を実行してください")
+            messagebox.showwarning("Warning", "Please run analysis first")
             return
 
         self.is_analyzing = True
-        self._start_busy_state("自動切り抜き中", "候補フレームから切り抜き範囲を推定しています")
+        self._start_busy_state("Auto-cropping", "Estimating crop range from candidate frames")
         self.auto_crop_btn.configure(state=tk.DISABLED)
-        self.log("切り抜き自動調整処理中...")
+        self.log("Processing auto-crop adjustment...")
 
         thread = threading.Thread(target=self._auto_crop_worker, daemon=True)
         thread.start()
 
     def _auto_crop_worker(self):
-        """自動切り抜きワーカースレッド"""
+        """Auto-crop worker thread"""
         cap = None
         try:
             if not self.candidate_frames or not self.unified_size:
                 return
 
-            # ワーカースレッドでは独自のVideoCaptureを使用（スレッドセーフ）
+            # Use independent VideoCapture in worker thread (thread-safe)
             cap = cv2.VideoCapture(self.video_path)
             if not cap.isOpened():
-                self.log("エラー: 動画を開けませんでした")
-                self.after(0, lambda: self._finish_busy_state("自動切り抜きエラー"))
+                self.log("Error: Could not open video")
+                self.after(0, lambda: self._finish_busy_state("Auto-crop error"))
                 return
 
             unified_w, unified_h = self.unified_size
 
-            # 自動切り抜き推定器を初期化
+            # Initialize auto-crop estimator
             estimator = AutoCropEstimator((unified_w, unified_h))
 
-            # 有効なフレームのパッチを収集
+            # Collect patches of valid frames
             patches = []
             for mf in self.candidate_frames:
                 if not mf.valid:
@@ -2339,34 +2339,34 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
                 if not ok or frame is None:
                     continue
 
-                # 正規化パッチを生成
+                # Generate normalized patch
                 patch = warp_frame_to_norm(frame, mf.quad, unified_w, unified_h)
                 patches.append(patch)
 
             if not patches:
-                self.log("警告: 有効なパッチがありません")
-                self.after(0, lambda: self._finish_busy_state("自動切り抜き対象がありません"))
+                self.log("Warning: No valid patches")
+                self.after(0, lambda: self._finish_busy_state("No targets for auto-cropping"))
                 return
 
-            # 切り抜きパラメータを推定
+            # Estimate crop parameters
             margins = estimator.estimate_crop_params(patches)
 
-            # UIに反映
+            # Reflect to UI
             self.after(0, lambda: self.crop_vars["top"].set(margins.get("top", 0)))
             self.after(0, lambda: self.crop_vars["bottom"].set(margins.get("bottom", 0)))
             self.after(0, lambda: self.crop_vars["left"].set(margins.get("left", 0)))
             self.after(0, lambda: self.crop_vars["right"].set(margins.get("right", 0)))
 
-            self.log(f"切り抜き自動調整完了: 上={margins['top']}px, 下={margins['bottom']}px, "
-                     f"左={margins['left']}px, 右={margins['right']}px")
-            self.after(0, lambda: self._finish_busy_state("自動切り抜き完了"))
+            self.log(f"Auto-crop adjustment complete: Top={margins['top']}px, Bottom={margins['bottom']}px, "
+                     f"Left={margins['left']}px, Right={margins['right']}px")
+            self.after(0, lambda: self._finish_busy_state("Auto-crop Complete"))
 
-            # プレビュー更新をUIスレッドで実行
+            # Execute preview update in UI thread
             self.after(100, self._on_update_preview)
 
         except Exception as e:
-            self.log(f"切り抜き自動調整エラー: {e}")
-            self.after(0, lambda: self._finish_busy_state("自動切り抜きエラー"))
+            self.log(f"Auto-crop adjustment error: {e}")
+            self.after(0, lambda: self._finish_busy_state("Auto-crop error"))
             traceback.print_exc()
 
         finally:
@@ -2376,12 +2376,12 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             self.after(0, lambda: self.auto_crop_btn.configure(state=tk.NORMAL))
 
     def _on_output(self):
-        """出力を実行"""
+        """Execute output"""
         if not self.preview_sprites:
-            messagebox.showwarning("警告", "先にプレビューを更新してください")
+            messagebox.showwarning("Warning", "Please update preview first")
             return
         
-        # 出力先ディレクトリを決定
+        # Determine output directory
         video_dir = os.path.dirname(os.path.abspath(self.video_path))
         base_output = os.path.join(video_dir, "mouth")
         output_dir = get_unique_output_dir(base_output)
@@ -2391,25 +2391,25 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
             
             for name, rgba in self.preview_sprites.items():
                 filepath = os.path.join(output_dir, f"{name}.png")
-                # 内部表現はRGBAなので、OpenCV保存前にBGRAへ並べ替える
+                # Internal representation is RGBA, so reorder to BGRA before OpenCV save
                 if not write_image_file(
                     filepath,
                     cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGRA),
                 ):
-                    raise RuntimeError(f"保存に失敗しました: {filepath}")
-                self.log(f"保存: {name}.png")
+                    raise RuntimeError(f"Failed to save: {filepath}")
+                self.log(f"Saved: {name}.png")
             
-            self.log(f"出力完了: {output_dir}")
+            self.log(f"OutputComplete: {output_dir}")
             
-            if messagebox.askyesno("完了", f"出力が完了しました。\n{output_dir}\n\nフォルダを開きますか？"):
+            if messagebox.askyesno("Complete", f"Output has been completed.\n{output_dir}\n\nDo you want to open the folder?"):
                 open_path_with_default_app(output_dir)
             
         except Exception as e:
-            self.log(f"出力エラー: {e}")
-            messagebox.showerror("エラー", str(e))
+            self.log(f"OutputError: {e}")
+            messagebox.showerror("Error", str(e))
     
     def destroy(self):
-        """クリーンアップ"""
+        """Cleanup"""
         self._stop_live_test()
         self._stop_player()
         if self._cached_cap:
@@ -2427,7 +2427,7 @@ class MouthSpriteExtractorApp(tk.Tk if not _HAS_TK_DND else TkinterDnD.Tk):
 # ---------------------------------------------------------------------------
 
 def main():
-    """メイン関数"""
+    """Main function"""
     app = MouthSpriteExtractorApp()
     app.mainloop()
     return 0

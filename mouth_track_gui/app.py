@@ -3,18 +3,18 @@
 """
 mouth_track_gui.py  (One-Click HQ)
 
-最高品質・設定最小の「一気通貫」GUI
-- 動画を選ぶ
-- 解析 (auto_mouth_track_v2.py)  ※自動修復 + early-stop
-- 解析後にキャリブ画面を自動表示 (calibrate_mouth_track.py)
-- キャリブが終わったら口消しを自動生成 (auto_erase_mouth.py)
-- 最後に口消し動画を自動プレビュー
+Highest quality, minimal setup "All-in-One" GUI
+- Select video
+- Analyze (auto_mouth_track_v2.py) *Auto repair + early-stop
+- Auto-display calibration screen after analysis (calibrate_mouth_track.py)
+- Auto-generate mouth-erased video after calibration (auto_erase_mouth.py)
+- Finally, auto-preview the mouth-erased video
 
-ユーザーが触る設定:
-- 口消し範囲 (coverage)
+User configurable settings:
+- Mouth erase range (coverage)
 
-注意:
-- サブプロセス出力の文字化け/Unicode問題を避けるため、UTF-8環境変数を付与します。
+Note:
+- UTF-8 environment variables are appended to prevent garbled characters/Unicode issues in subprocess outputs.
 """
 
 from __future__ import annotations
@@ -92,11 +92,11 @@ from motionpngtuber.mouth_color_adjust import (
 
 # --- smoothing presets (GUI) ---
 SMOOTHING_PRESETS: dict[str, float | None] = {
-    "Auto（今のまま）": None,  # pass nothing -> keep current default behavior
-    "ゆっくり（1.5）": 1.5,
-    "普通（3.0）": 3.0,
-    "高速（6.0）": 6.0,
-    "追従最優先（0）": 0.0,  # disable smoothing
+    "Auto (As is)": None,  # pass nothing -> keep current default behavior
+    "Slow (1.5)": 1.5,
+    "Normal (3.0)": 3.0,
+    "Fast (6.0)": 6.0,
+    "Tracking Priority (0)": 0.0,  # disable smoothing
 }
 SMOOTHING_LABELS = list(SMOOTHING_PRESETS.keys())
 
@@ -105,15 +105,15 @@ SMOOTHING_LABELS = list(SMOOTHING_PRESETS.keys())
 
 # --- emotion preset (GUI / runtime) ---
 EMOTION_PRESETS: dict[str, str] = {
-    "安定（配信向け）": "stable",
-    "標準": "standard",
-    "キビキビ（ゲーム向け）": "snappy",
+    "Stable (For Streaming)": "stable",
+    "Standard": "standard",
+    "Snappy (For Gaming)": "snappy",
 }
 EMOTION_PRESET_LABELS = list(EMOTION_PRESETS.keys())
 
 SOFT_STOP_GRACE_SEC = 3.0
-STOP_BTN_TEXT_SOFT = "停止予約中（もう一度で強制停止）"
-MAX_LOG_LINES = 200  # ログ表示の上限行数
+STOP_BTN_TEXT_SOFT = "Stop Requested (Press again to force stop)"
+MAX_LOG_LINES = 200  # Max log lines to display
 
 # ---------- GUI ----------
 class App(tk.Tk):
@@ -144,17 +144,17 @@ class App(tk.Tk):
         self._suspend_mouth_color_adjust_events = False
 
         sess = load_session()
-        # GUIでは元動画を表示したいが、runtimeは背景としてmouthlessを使いたいので
-        # sessionには video(=背景用) と source_video(=元動画) を分けて保存する
+        # In the GUI, we want to show the source video, but runtime wants to use mouthless as background,
+        # so we save video (=for background) and source_video (=source video) separately in the session
         self.video_var = tk.StringVar(value=str(sess.get("source_video", sess.get("video", "")) or ""))
         self.mouth_dir_var = tk.StringVar(value=str(sess.get("mouth_dir", "")) or "")
 
         # --- character / emotion-auto (runtime) ---
         self.character_var = tk.StringVar(value=str(sess.get("character", "")))
 
-        _ep = str(sess.get("emotion_preset", "標準"))
+        _ep = str(sess.get("emotion_preset", "Standard"))
         if _ep not in EMOTION_PRESETS:
-            _ep = "標準"
+            _ep = "Standard"
         self.emotion_preset_var = tk.StringVar(value=_ep)
 
         self.emotion_hud_var = tk.BooleanVar(value=safe_bool(sess.get("emotion_hud", False), default=False))
@@ -180,8 +180,8 @@ class App(tk.Tk):
         self.mouth_inspect_boost_var = tk.DoubleVar(
             value=safe_float(sess.get("mouth_inspect_boost", 1.0), 1.0, min_v=1.0, max_v=4.0),
         )
-        # 解析→キャリブの mouth quad 余白係数。
-        # 通常は 2.1 を推奨し、必要な場合だけ詳細設定で微調整できるようにする。
+        # Padding coefficient for mouth quad in analysis -> calibration.
+        # Usually 2.1 is recommended, allows fine-tuning in advanced settings only if needed.
         self.pad_var = tk.DoubleVar(
             value=safe_float(sess.get("pad", 2.10), 2.10, min_v=1.20, max_v=3.20),
         )
@@ -192,12 +192,12 @@ class App(tk.Tk):
         self.erase_shading_var = tk.BooleanVar(value=(_esh_str != "none"))
 
         # tracking smoothing preset (GUI only)
-        _smooth = sess.get("smoothing", "Auto（今のまま）")
+        _smooth = sess.get("smoothing", "Auto (As is)")
         if _smooth not in SMOOTHING_PRESETS:
-            _smooth = "Auto（今のまま）"
+            _smooth = "Auto (As is)"
         self.smoothing_menu_var = tk.StringVar(value=_smooth)
 
-        # runtime用：オーディオ入力デバイス
+        # For runtime: Audio input device
         self.audio_device_var = tk.IntVar(value=safe_int(sess.get("audio_device", 31), 31, min_v=0))
         _audio_spec = str(sess.get("audio_device_spec", "") or "").strip()
         if not _audio_spec:
@@ -207,7 +207,7 @@ class App(tk.Tk):
 
         # Progress (step-level)
         self.progress_var = tk.DoubleVar(value=0.0)
-        self.progress_text_var = tk.StringVar(value="待機中")
+        self.progress_text_var = tk.StringVar(value="Waiting")
         self._progress_total = 1
 
         self._ui = self._build_ui()
@@ -477,7 +477,7 @@ class App(tk.Tk):
             if os.path.isfile(self._live_color_control_path):
                 os.unlink(self._live_color_control_path)
         except Exception as e:
-            self.log(f"[warn] ライブ調整ファイルの削除に失敗しました: {e}")
+            self.log(f"[warn] Failed to delete live adjust file: {e}")
 
     def _clear_auto_color_files(self) -> None:
         for path in (self._auto_color_request_path, self._auto_color_result_path):
@@ -485,7 +485,7 @@ class App(tk.Tk):
                 if os.path.isfile(path):
                     os.unlink(path)
             except Exception as e:
-                self.log(f"[warn] 自動補正ファイルの削除に失敗しました: {e}")
+                self.log(f"[warn] Failed to delete auto color files: {e}")
 
     def _cancel_auto_color_poll(self) -> None:
         if self._auto_color_poll_job:
@@ -502,10 +502,10 @@ class App(tk.Tk):
         self._auto_color_request_deadline = 0.0
         self._set_auto_color_button_enabled(
             self._live_color_control_active,
-            text="色なじみ自動補正",
+            text="Auto Color Adjust",
         )
         if success:
-            self.log("[auto-color] 自動補正を反映しました")
+            self.log("[auto-color] Applied auto color adjust")
 
     def _apply_auto_color_result(self, data: dict) -> None:
         current_cfg = self._build_mouth_color_adjust()
@@ -550,13 +550,13 @@ class App(tk.Tk):
         if (not self._auto_color_request_pending) or (not self._auto_color_request_id):
             return
         if time.time() >= self._auto_color_request_deadline:
-            self.log("[auto-color warn] 自動補正がタイムアウトしました")
+            self.log("[auto-color warn] Auto color adjust timed out")
             self._finish_auto_color_request(success=False)
             return
         try:
             data = self._load_json_file(self._auto_color_result_path)
         except Exception as e:
-            self.log(f"[auto-color warn] result 読み込み失敗: {e}")
+            self.log(f"[auto-color warn] Failed to read result: {e}")
             data = None
         if (
             not data
@@ -566,7 +566,7 @@ class App(tk.Tk):
             self._auto_color_poll_job = self.after(120, self._poll_auto_color_result)
             return
         if data.get("error"):
-            self.log(f"[auto-color warn] 自動補正に失敗しました: {data.get('error')}")
+            self.log(f"[auto-color warn] Auto color adjust failed: {data.get('error')}")
             self._clear_auto_color_files()
             self._finish_auto_color_request(success=False)
             return
@@ -576,10 +576,10 @@ class App(tk.Tk):
 
     def on_auto_mouth_color_adjust(self) -> None:
         if not self._live_color_control_active:
-            messagebox.showinfo("自動補正", "ライブ実行中のみ使用できます。")
+            messagebox.showinfo("Auto Color Adjust", "Can only be used during Live run.")
             return
         if self._auto_color_request_pending:
-            self.log("[auto-color] 既に自動補正を実行中です")
+            self.log("[auto-color] Auto color adjust is already running")
             return
         request_id = f"{time.time():.6f}"
         payload = {
@@ -591,13 +591,13 @@ class App(tk.Tk):
             self._clear_auto_color_files()
             self._write_json_atomic(self._auto_color_request_path, payload)
         except Exception as e:
-            self.log(f"[auto-color warn] request 書き込み失敗: {e}")
+            self.log(f"[auto-color warn] Failed to write request: {e}")
             return
         self._auto_color_request_pending = True
         self._auto_color_request_id = request_id
         self._auto_color_request_deadline = time.time() + 5.0
-        self._set_auto_color_button_enabled(False, text="自動補正待ち…")
-        self.log("[auto-color] 自動補正を要求しました")
+        self._set_auto_color_button_enabled(False, text="Waiting for auto color...")
+        self.log("[auto-color] Requested auto color adjust")
         self._auto_color_poll_job = self.after(120, self._poll_auto_color_result)
 
     # ----- logging (thread-safe) -----
@@ -608,8 +608,8 @@ class App(tk.Tk):
         ok = save_session(payload)
         if not ok:
             self.log(
-                "[warn] セッション保存に失敗しました。"
-                "次回起動時に設定が復元されない可能性があります。"
+                "[warn] Failed to save session. "
+                "Settings may not be restored on next startup."
             )
         return ok
 
@@ -621,7 +621,7 @@ class App(tk.Tk):
                 s = s.replace("\x00", "")
                 self.txt.configure(state="normal")
                 self.txt.insert("end", s + "\n")
-                # 上限チェック
+                # Limit check
                 line_count = int(self.txt.index("end-1c").split(".")[0])
                 if line_count > MAX_LOG_LINES:
                     excess = line_count - MAX_LOG_LINES
@@ -633,14 +633,14 @@ class App(tk.Tk):
         self.after(100, self._poll_logs)
 
     def _clear_log(self) -> None:
-        """ログをクリア（キューも空にする）"""
-        # キューをドレイン
+        """Clear log (and empty queue)"""
+        # Drain queue
         try:
             while True:
                 self.log_q.get_nowait()
         except queue.Empty:
             pass
-        # Textをクリア
+        # Clear text
         self.txt.configure(state="normal")
         self.txt.delete("1.0", "end")
         self.txt.configure(state="disabled")
@@ -649,7 +649,7 @@ class App(tk.Tk):
     def on_open_sprite_extractor(self) -> None:
         script_path = os.path.join(HERE, "mouth_sprite_extractor_gui.py")
         if not os.path.isfile(script_path):
-            self._show_error("エラー", f"口素材抽出ツールが見つかりません:\n{script_path}")
+            self._show_error("Error", f"Mouth sprite extractor tool not found:\n{script_path}")
             return
 
         python_exe = sys.executable or "python"
@@ -667,10 +667,10 @@ class App(tk.Tk):
             popen_kwargs["creationflags"] = flags
         try:
             subprocess.Popen(cmd, **popen_kwargs)  # noqa: S603
-            self.log("[gui] 口PNG素材作成ツールを起動しました")
-            self.log("[gui] 素材作成後は、この画面に戻って『mouthフォルダ（口PNG素材）』を選択してください")
+            self.log("[gui] Started Mouth PNG Sprite Extractor tool")
+            self.log("[gui] After extracting sprites, return to this screen and select the 'mouth folder (Mouth PNG Sprites)'.")
         except Exception as e:
-            self._show_error("エラー", f"口素材抽出ツールを起動できませんでした。\n{e}")
+            self._show_error("Error", f"Failed to start Mouth Sprite Extractor tool.\n{e}")
 
     def _guess_mouth_dir(self) -> str:
         v = self.video_var.get().strip()
@@ -695,7 +695,7 @@ class App(tk.Tk):
         if not devices:
             if init:
                 cur_spec = self.audio_device_spec_var.get().strip()
-                self.audio_device_menu_var.set(cur_spec or f"{self.audio_device_var.get()}: (未取得)")
+                self.audio_device_menu_var.set(cur_spec or f"{self.audio_device_var.get()}: (Not retrieved)")
             return
 
         self._audio_items = devices  # optional stash
@@ -752,7 +752,7 @@ class App(tk.Tk):
         if is_emotion_level_mouth_root(mouth_root):
             try:
                 self.cmb_character.configure(state="disabled")
-                self.cmb_character["values"] = ["(不要：直下が感情フォルダ)"]
+                self.cmb_character["values"] = ["(Not required: direct emotion folders)"]
             except Exception:
                 pass
             self.character_var.set("")
@@ -763,7 +763,7 @@ class App(tk.Tk):
             # Keep enabled but show placeholder.
             try:
                 self.cmb_character.configure(state="readonly")
-                self.cmb_character["values"] = ["(なし)"]
+                self.cmb_character["values"] = ["(None)"]
             except Exception:
                 pass
             self.character_var.set("")
@@ -818,7 +818,7 @@ class App(tk.Tk):
             self._post_set_character(chars[0], persist=True)
             return chars[0]
 
-        self._show_error("エラー", "キャラクターを選択してください（mouth_dir直下のフォルダから選びます）。")
+        self._show_error("Error", "Please select a character (choose from folders directly under mouth_dir).")
         return None
 
     def _set_character(self, character: str, *, persist: bool = False) -> None:
@@ -835,7 +835,7 @@ class App(tk.Tk):
     def _warn_soft_stop(self) -> None:
         if self.stop_mode != "soft":
             return
-        self.log("[gui] 停止予約中: 終了待機中。必要ならもう一度で強制停止してください。")
+        self.log("[gui] Stop requested: Waiting to finish. Press again to force stop if necessary.")
 
     def _set_stop_mode(self, mode: str) -> None:
         def _apply():
@@ -885,7 +885,7 @@ class App(tk.Tk):
         def _apply():
             self.progress.configure(mode="determinate", maximum=1.0)
             self.progress_var.set(0.0)
-            self.progress_text_var.set("待機中")
+            self.progress_text_var.set("Waiting")
         self.after(0, _apply)
 
     def _progress_begin(self, total_steps: int, text: str) -> None:
@@ -916,7 +916,7 @@ class App(tk.Tk):
         self.pad_var.set(pad_v)
         self.coverage_var.set(cov_v)
         self._save_session({"pad": pad_v, "coverage": cov_v})
-        self.log(f"[gui] 見た目確認の設定を反映しました: pad={pad_v:.2f} / 口消し範囲={cov_v:.2f}")
+        self.log(f"[gui] Preview settings applied: pad={pad_v:.2f} / mouth coverage={cov_v:.2f}")
 
     def _resolve_workflow_paths(
         self,
@@ -933,18 +933,18 @@ class App(tk.Tk):
             prefer_calibrated=prefer_calibrated,
         )
         if paths is None:
-            self._show_error("エラー", err)
+            self._show_error("Error", err)
             return None
         return paths
 
     def _resolve_mouth_root_value(self, mouth_root: str) -> str | None:
         path, err = validate_existing_dir(
             mouth_root,
-            empty_message="mouthフォルダを選択してください。",
-            missing_label="mouthフォルダ",
+            empty_message="Please select the mouth folder.",
+            missing_label="mouth folder",
         )
         if path is None:
-            self._show_error("エラー", err)
+            self._show_error("Error", err)
             return None
         return path
 
@@ -959,13 +959,13 @@ class App(tk.Tk):
     def _resolve_loop_video(self, loop_video: str) -> str | None:
         path, err = validate_existing_file(
             loop_video,
-            empty_message="背景動画が未設定です。先に『② 口消し動画生成』を実行してください。",
-            missing_label="背景動画",
+            empty_message="Background video is not set. Please run '② Generate Mouthless Video' first.",
+            missing_label="Background video",
         )
         if path is None:
             if not loop_video:
-                err = "背景動画が見つかりません（先に口消し動画生成を推奨）"
-            self._show_error("エラー", err)
+                err = "Background video not found (Recommend generating mouthless video first)"
+            self._show_error("Error", err)
             return None
         return path
 
@@ -976,11 +976,11 @@ class App(tk.Tk):
 
         searched_base = resolve_character_dir(mouth_root, char)
         self._show_error(
-            "エラー",
+            "Error",
             format_missing_path_message(
-                "キャリブ用 open.png",
+                "open.png for calibration",
                 os.path.join(searched_base, "open.png"),
-                "mouthフォルダ直下、または Default / neutral などの感情フォルダ内に open.png を置いてください。",
+                "Place open.png directly under the mouth folder, or inside an emotion folder such as Default / neutral.",
             ),
         )
         return None
@@ -988,17 +988,17 @@ class App(tk.Tk):
     # ----- file pickers -----
     def on_pick_video(self) -> None:
         if sys.platform == "darwin":  # Mac
-            p = filedialog.askopenfilename(title="動画を選択")
+            p = filedialog.askopenfilename(title="Select Video")
         else:  # Windows/Linux
             p = filedialog.askopenfilename(
-                title="動画を選択",
+                title="Select Video",
                 filetypes=[("Video", "*.mp4;*.mov;*.mkv;*.avi;*.webm;*.m4v"), ("All", "*.*")],
             )
         if not p:
             return
         self.video_var.set(p)
         self._autofill_mouth_dir()
-        # 選択直後は video=source_video として保存（まだmouthless未生成のため）
+        # Right after selection, save as video=source_video (since mouthless is not generated yet)
         self._save_session({
             "video": self.video_var.get(),
             "source_video": self.video_var.get(),
@@ -1013,7 +1013,7 @@ class App(tk.Tk):
         })
 
     def on_pick_mouth_dir(self) -> None:
-        d = filedialog.askdirectory(title="mouthフォルダを選択")
+        d = filedialog.askdirectory(title="Select Mouth Folder")
         if not d:
             return
         self.mouth_dir_var.set(d)
@@ -1076,14 +1076,14 @@ class App(tk.Tk):
         if plan.session_init:
             self._save_session(plan.session_init)
 
-        self._progress_begin(plan.total_steps, f"{plan.name}準備中…")
+        self._progress_begin(plan.total_steps, f"Preparing {plan.name}...")
 
         last_rc = 0
         skipped = False
         for i, step in enumerate(plan.steps, 1):
             if step.skip_on_stop and self.runner.soft_requested:
                 prog = step.progress_label or step.label
-                self.log(f"[info] 停止予約のため、{prog}以降をスキップします。")
+                self.log(f"[info] Skipping {prog} and later due to stop request.")
                 skipped = True
                 break
 
@@ -1096,7 +1096,7 @@ class App(tk.Tk):
                 self.log(step.pre_log)
 
             prog = step.progress_label or step.label
-            self._progress_step(i, f"{prog}中… ({i}/{plan.total_steps})")
+            self._progress_step(i, f"Running {prog}... ({i}/{plan.total_steps})")
 
             result = self.runner.run_stream(
                 step.cmd, cwd=step.cwd, allow_soft_stop=step.allow_soft_stop,
@@ -1110,28 +1110,28 @@ class App(tk.Tk):
             if result.was_stopped:
                 skipped = True
                 self.log(
-                    "[info] 強制停止しました。"
+                    "[info] Force stopped."
                     if self.stop_mode == "force"
-                    else "[info] 停止しました。"
+                    else "[info] Stopped."
                 )
-                self._progress_step(i, f"{prog}停止")
+                self._progress_step(i, f"{prog} Stopped")
                 break
 
             if last_rc != 0 or any(
                 not os.path.isfile(p) for p in step.expected_outputs
             ):
                 if step.error_msg:
-                    self._show_error("失敗", f"{step.error_msg} (rc={last_rc})")
+                    self._show_error("Failure", f"{step.error_msg} (rc={last_rc})")
                 return last_rc
 
-            self._progress_step(i, f"{prog}完了 ({i}/{plan.total_steps})")
+            self._progress_step(i, f"{prog} Completed ({i}/{plan.total_steps})")
 
         if not skipped:
             if plan.session_final:
                 self._save_session(plan.session_final)
 
             if self.runner.soft_requested and plan.post_actions:
-                self.log("[info] 停止予約のため、ブラウザ用出力とプレビューをスキップします。")
+                self.log("[info] Due to stop request, browser output and preview will be skipped.")
             else:
                 for action in plan.post_actions:
                     self._run_post_action(action)
@@ -1149,29 +1149,29 @@ class App(tk.Tk):
         # the real exit status below.
         if result.was_stopped:
             self.log(
-                "[info] ライブを強制停止しました。"
+                "[info] Force stopped live run."
                 if self.stop_mode == "force"
-                else "[info] ライブを停止しました。"
+                else "[info] Stopped live run."
             )
-            self._progress_step(1, "ライブ停止")
+            self._progress_step(1, "Live Stopped")
             return
         if rc != 0:
-            self._progress_step(1, "ライブ異常終了")
+            self._progress_step(1, "Live Error")
             self._show_error(
-                "失敗",
-                f"ライブ実行が異常終了しました (rc={rc})\n"
-                "ログを確認してください。",
+                "Failure",
+                f"Live run terminated abnormally (rc={rc})\n"
+                "Please check the logs.",
             )
             return
-        self._progress_step(1, "ライブ終了")
+        self._progress_step(1, "Live Finished")
 
     def _run_post_action(self, action: PostAction) -> None:
         """Execute a post-plan action."""
         if action.tag == "export_browser" and len(action.args) >= 2:
-            self.log("\n=== ブラウザ用データ出力 ===")
+            self.log("\n=== Browser Data Output ===")
             self._export_browser_assets(action.args[0], action.args[1])
         elif action.tag == "open_preview" and len(action.args) >= 1:
-            self.log("\nプレビューを起動します…")
+            self.log("\nLaunching preview...")
             self._open_video_preview(action.args[0])
 
     # ----- preview -----
@@ -1218,10 +1218,10 @@ class App(tk.Tk):
 
     def _export_browser_assets(self, mouthless_mp4: str, calib_npz: str) -> None:
         if not os.path.isfile(mouthless_mp4):
-            self.log("[warn] ブラウザ用出力: 口消し動画が見つかりません。")
+            self.log("[warn] Browser Output: Mouthless video not found.")
             return
         if not os.path.isfile(calib_npz):
-            self.log("[warn] ブラウザ用出力: mouth_track_calibrated.npz がありません。")
+            self.log("[warn] Browser Output: mouth_track_calibrated.npz not found.")
             return
 
         fps = None
@@ -1231,10 +1231,10 @@ class App(tk.Tk):
                 if "fps" in npz:
                     fps = float(npz["fps"])
         except Exception as e:
-            self.log(f"[warn] ブラウザ用出力: fps取得に失敗しました: {e}")
+            self.log(f"[warn] Browser Output: Failed to get fps: {e}")
 
         if not fps or fps <= 0:
-            self.log("[warn] ブラウザ用出力: fpsが不明のためCFR変換をスキップします。")
+            self.log("[warn] Browser Output: Skipping CFR conversion because fps is unknown.")
             fps = None
 
         out_dir = os.path.dirname(os.path.abspath(mouthless_mp4))
@@ -1243,24 +1243,24 @@ class App(tk.Tk):
         try:
             from convert_npz_to_json import convert_npz_to_json  # type: ignore
             convert_npz_to_json(Path(calib_npz), Path(out_dir))
-            self.log(f"[info] ブラウザ用JSON出力: {json_path}")
+            self.log(f"[info] Browser JSON Output: {json_path}")
         except Exception as e:
-            self.log(f"[warn] ブラウザ用JSON出力に失敗しました: {e}")
+            self.log(f"[warn] Failed to output Browser JSON: {e}")
 
         if not fps:
             if os.path.isfile(json_path):
-                self.log(f"[info] ブラウザ用出力の利用可能ファイル: {json_path}")
+                self.log(f"[info] Available files for browser output: {json_path}")
             return
 
         ffmpeg = shutil.which("ffmpeg")
         if not ffmpeg:
             self.log(
-                "[warn] ブラウザ用出力: ffmpegが見つからないためH.264変換をスキップします。"
-                " mouth_track.json は出力済みです。"
-                " MotionPNGTuber_Player などでは H.264 版MP4があると扱いやすくなります。"
+                "[warn] Browser Output: Skipping H.264 conversion because ffmpeg was not found. "
+                " mouth_track.json has been generated. "
+                " Having an H.264 MP4 makes it easier to handle in MotionPNGTuber_Player, etc."
             )
             if os.path.isfile(json_path):
-                self.log(f"[info] ブラウザ用出力の利用可能ファイル: {json_path}")
+                self.log(f"[info] Available files for browser output: {json_path}")
             return
 
         h264_mp4 = os.path.splitext(mouthless_mp4)[0] + "_h264.mp4"
@@ -1285,11 +1285,11 @@ class App(tk.Tk):
         ]
         rc = self._run_cmd_stream(cmd, cwd=HERE)
         if rc != 0 or (not os.path.isfile(h264_mp4)):
-            self.log(f"[warn] ブラウザ用H.264変換に失敗しました (rc={rc})")
+            self.log(f"[warn] Browser H.264 conversion failed (rc={rc})")
         else:
-            self.log(f"[info] ブラウザ用H.264出力: {h264_mp4}")
+            self.log(f"[info] Browser H.264 Output: {h264_mp4}")
             if os.path.isfile(json_path):
-                self.log(f"[info] ブラウザ用出力の利用可能ファイル: {json_path}, {h264_mp4}")
+                self.log(f"[info] Available files for browser output: {json_path}, {h264_mp4}")
 
     # ----- workflow buttons -----
     def _start_worker(self, target) -> None:
@@ -1303,7 +1303,7 @@ class App(tk.Tk):
             try:
                 target()
             finally:
-                # ワーカーが何で終わっても UI を戻す
+                # Restore UI regardless of how the worker finishes
                 self._set_running(False)
         self.worker_thread = threading.Thread(target=runner, daemon=True)
         self.worker_thread.start()
@@ -1314,7 +1314,7 @@ class App(tk.Tk):
                 base_dir = HERE
                 ok, msg = ensure_backend_sanity(base_dir)
                 if not ok:
-                    self._show_error("エラー", msg)
+                    self._show_error("Error", msg)
                     return
                 paths = self._resolve_workflow_paths()
                 if paths is None:
@@ -1355,7 +1355,7 @@ class App(tk.Tk):
                 )
                 self._execute_plan(plan)
             except Exception as e:
-                self._show_error("エラー", str(e))
+                self._show_error("Error", str(e))
         self._start_worker(_worker)
 
     def on_calib_only(self) -> None:
@@ -1392,7 +1392,7 @@ class App(tk.Tk):
                 )
                 self._execute_plan(plan)
             except Exception as e:
-                self._show_error("エラー", str(e))
+                self._show_error("Error", str(e))
         self._start_worker(_worker)
 
     def on_erase_mouthless(self) -> None:
@@ -1414,11 +1414,11 @@ class App(tk.Tk):
                 erase_track = paths.preferred_track
                 if erase_track is None:
                     self._show_error(
-                        "エラー",
+                        "Error",
                         format_missing_path_message(
-                            "口消しに使う track",
+                            "Track to use for erase",
                             paths.calib_npz,
-                            "『キャリブのみ（やり直し）』または『① 解析→キャリブ』を実行してください。",
+                            "Please run 'Calibration Only (Redo)' or '① Analyze -> Calibrate'.",
                         ),
                     )
                     return
@@ -1442,18 +1442,18 @@ class App(tk.Tk):
                 )
                 self._execute_plan(plan)
             except Exception as e:
-                self._show_error("エラー", str(e))
+                self._show_error("Error", str(e))
         self._start_worker(_worker)
 
     def on_preview_erase_range(self) -> None:
-        """フル書き出し前に、pad / 口消し範囲を軽量確認するプレビュー。"""
+        """Lightweight preview to check pad / erase coverage before full export."""
         def _worker():
             try:
                 try:
                     import cv2  # type: ignore  # noqa: F401
                     import numpy  # type: ignore  # noqa: F401
                 except Exception:
-                    self._show_error("エラー", "OpenCV(cv2) と numpy が必要です。")
+                    self._show_error("Error", "OpenCV (cv2) and numpy are required.")
                     return
 
                 paths = self._resolve_workflow_paths(
@@ -1466,11 +1466,11 @@ class App(tk.Tk):
                 track_path = paths.preferred_track
                 if track_path is None:
                     self._show_error(
-                        "エラー",
+                        "Error",
                         format_missing_path_message(
                             "mouth_track.npz / mouth_track_calibrated.npz",
                             paths.track_npz,
-                            "先に『① 解析→キャリブ』を実行してください。",
+                            "Please run '① Analyze -> Calibrate' first.",
                         ),
                     )
                     return
@@ -1485,7 +1485,7 @@ class App(tk.Tk):
                         elif cur_char:
                             open_sprite = best_open_sprite_for_character(mouth_root, cur_char)
                 except Exception as e:
-                    self.log(f"[warn] 見た目確認用 open.png の解決に失敗しました: {e}")
+                    self.log(f"[warn] Failed to resolve open.png for preview: {e}")
 
                 from .preview import run_erase_range_preview
 
@@ -1508,9 +1508,9 @@ class App(tk.Tk):
                         lambda p=selection.pad, c=selection.coverage: self._apply_preview_selection(p, c),
                     )
             except Exception as e:
-                self._show_error("エラー", str(e))
+                self._show_error("Error", str(e))
 
-        # プレビューは外部プロセスではないが、UIが固まらないようワーカで回す
+        # Preview is not an external process, but run it in a worker so UI doesn't freeze
         self._start_worker(_worker)
 
     def on_live_run(self) -> None:
@@ -1557,7 +1557,7 @@ class App(tk.Tk):
                 runtime_py = resolve_runtime_script(base_dir)
 
                 if not script_contains(runtime_py, ["--emotion-auto"]):
-                    self.log("[warn] runtime が感情オートに未対応のため、従来モードで実行します。")
+                    self.log("[warn] runtime does not support emotion auto. Running in legacy mode.")
                 self._cleanup_live_ipc_session()
                 self._set_live_ipc_session(create_live_ipc_session())
                 initial_live_color_payload = self._build_live_color_control_payload(live_color_cfg)
@@ -1596,15 +1596,15 @@ class App(tk.Tk):
                 self._save_session(plan.session_init)
                 step = plan.steps[0]
                 self.log(f"\n=== {step.label} ===")
-                self._progress_begin(1, "ライブ準備中…")
-                self._progress_step(1, "ライブ実行中…")
+                self._progress_begin(1, "Preparing Live...")
+                self._progress_step(1, "Running Live...")
                 result = self._run_cmd_stream_result(
                     step.cmd, cwd=step.cwd,
                     allow_soft_interrupt=step.allow_soft_stop,
                 )
                 self._finalize_live_run_result(result)
             except Exception as e:
-                self._show_error("エラー", str(e))
+                self._show_error("Error", str(e))
             finally:
                 self._cancel_auto_color_poll()
                 self._auto_color_request_pending = False
@@ -1614,7 +1614,7 @@ class App(tk.Tk):
                 self._clear_live_color_control()
                 self._clear_auto_color_files()
                 self._cleanup_live_ipc_session()
-                self._set_auto_color_button_enabled(False, text="色なじみ自動補正")
+                self._set_auto_color_button_enabled(False, text="Auto Color Adjust")
         self._start_worker(_worker)
 
 

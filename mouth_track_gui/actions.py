@@ -54,7 +54,7 @@ class ActionPlan:
     session_init: dict = field(default_factory=dict)
     session_final: dict = field(default_factory=dict)
     post_actions: tuple[PostAction, ...] = ()
-    completion_msg: str = "完了"
+    completion_msg: str = "Complete"
 
     @property
     def total_steps(self) -> int:
@@ -281,22 +281,22 @@ def plan_track_and_calib(
 ) -> ActionPlan:
     """Build an ActionPlan for track + calibrate workflow."""
     return ActionPlan(
-        name="解析/キャリブ",
+        name="Track/Calibrate",
         steps=(
             ActionStep(
                 cmd=build_track_cmd(
                     base_dir, video, track_npz, pad,
                     smoothing_cutoff=smoothing_cutoff,
                 ),
-                label="解析（自動修復つき・最高品質）",
-                progress_label="解析",
+                label="Track (With Auto-Repair, Highest Quality)",
+                progress_label="Track",
                 cwd=base_dir,
                 expected_outputs=(track_npz,),
                 allow_soft_stop=True,
-                error_msg="解析に失敗しました。ログを確認してください。GPU環境では自動CPUフォールバックも試行されます",
+                error_msg="Tracking failed. Please check the log. Automatic CPU fallback will also be attempted in GPU environments.",
                 pre_log=(
-                    "初回解析は時間がかかることがあります。"
-                    "GPU非互換環境では自動でCPUに切り替わり、さらに遅くなる場合があります。"
+                    "Initial tracking may take some time. "
+                    "In GPU-incompatible environments, it will automatically switch to CPU and may be even slower."
                 ),
             ),
             ActionStep(
@@ -310,12 +310,12 @@ def plan_track_and_calib(
                     mouth_edge_width_ratio=mouth_edge_width_ratio,
                     mouth_inspect_boost=mouth_inspect_boost,
                 ),
-                label="キャリブレーション（画面を閉じると完了）",
-                progress_label="キャリブ",
+                label="Calibration (Close window to complete)",
+                progress_label="Calibrate",
                 cwd=base_dir,
                 expected_outputs=(calib_npz,),
                 allow_soft_stop=True,
-                error_msg="キャリブに失敗しました",
+                error_msg="Calibration failed",
                 skip_on_stop=True,
             ),
         ),
@@ -340,7 +340,7 @@ def plan_track_and_calib(
             "track": track_npz,
             "track_calibrated": calib_npz,
         },
-        completion_msg="完了（次は『② 口消し動画生成』）",
+        completion_msg="Complete (Next is '2. Generate Mouthless Video')",
     )
 
 
@@ -363,11 +363,11 @@ def plan_calib_only(
     use_calib = os.path.isfile(calib_npz)
     input_track = calib_npz if use_calib else track_npz
     pre_log = (
-        "[info] 既存のキャリブ済みトラックを使用（位置を維持）"
+        "[info] Using existing calibrated track (position maintained)"
         if use_calib else ""
     )
     return ActionPlan(
-        name="キャリブ（やり直し）",
+        name="Calibrate (Redo)",
         steps=(
             ActionStep(
                 cmd=build_calib_cmd(
@@ -380,12 +380,12 @@ def plan_calib_only(
                     mouth_edge_width_ratio=mouth_edge_width_ratio,
                     mouth_inspect_boost=mouth_inspect_boost,
                 ),
-                label="キャリブレーション（やり直し）",
-                progress_label="キャリブ",
+                label="Calibration (Redo)",
+                progress_label="Calibrate",
                 cwd=base_dir,
                 expected_outputs=(calib_npz,),
                 allow_soft_stop=True,
-                error_msg="キャリブに失敗しました",
+                error_msg="Calibration failed",
                 pre_log=pre_log,
             ),
         ),
@@ -416,20 +416,20 @@ def plan_erase(
 ) -> ActionPlan:
     """Build an ActionPlan for mouth-erase video generation."""
     return ActionPlan(
-        name="口消し動画生成",
+        name="Generate Mouthless Video",
         steps=(
             ActionStep(
                 cmd=build_erase_cmd(
                     base_dir, video, erase_track, mouthless_mp4,
                     coverage, erase_shading,
                 ),
-                label="口消し動画生成（自動候補→自動選別）",
-                progress_label="口消し",
+                label="Generate Mouthless Video (Auto Candidate -> Auto Selection)",
+                progress_label="Erase",
                 cwd=base_dir,
                 expected_outputs=(mouthless_mp4,),
                 allow_soft_stop=False,
-                error_msg="口消し動画生成に失敗しました",
-                pre_log=f"[info] 口消しに使用する track: {erase_track}",
+                error_msg="Failed to generate mouthless video",
+                pre_log=f"[info] Track used for erasing: {erase_track}",
             ),
         ),
         session_final={
@@ -447,7 +447,7 @@ def plan_erase(
             PostAction("export_browser", (mouthless_mp4, calib_npz)),
             PostAction("open_preview", (mouthless_mp4,)),
         ),
-        completion_msg="完了（次は『③ ライブ実行』）",
+        completion_msg="Complete (Next is '3. Live Run')",
     )
 
 
@@ -479,7 +479,7 @@ def plan_live(
 ) -> ActionPlan:
     """Build an ActionPlan for live runtime execution."""
     return ActionPlan(
-        name="ライブ実行",
+        name="Live Run",
         steps=(
             ActionStep(
                 cmd=build_live_cmd(
@@ -500,8 +500,8 @@ def plan_live(
                     auto_color_request_path=auto_color_request_path,
                     auto_color_result_path=auto_color_result_path,
                 ),
-                label="ライブ実行（qで終了）",
-                progress_label="ライブ実行",
+                label="Live Run (Press 'q' to exit)",
+                progress_label="Live Run",
                 cwd=base_dir,
                 allow_soft_stop=True,
             ),

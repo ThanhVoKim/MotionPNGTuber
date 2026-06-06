@@ -1,6 +1,6 @@
 """Lightweight pad / erase-range preview logic for mouth_track_gui.
 
-OpenCV/NumPy only — no tkinter dependency.
+OpenCV/NumPy only - no tkinter dependency.
 The goal is to let users compare pad / coverage quickly before running the
 heavier mouthless-video generation step.
 """
@@ -72,10 +72,10 @@ def load_and_scale_quads(
     """
     npz = np.load(track_path, allow_pickle=False)
     if "quad" not in npz:
-        raise ValueError("track npz に 'quad' がありません。")
+        raise ValueError("track npz does not contain 'quad'.")
     quads = np.asarray(npz["quad"], dtype=np.float32)
     if quads.ndim != 3 or quads.shape[1:] != (4, 2):
-        raise ValueError("quad の形が不正です（(N,4,2) が必要）。")
+        raise ValueError("Invalid quad shape (requires (N,4,2)).")
 
     N = int(quads.shape[0])
     valid = (
@@ -455,7 +455,7 @@ def run_erase_range_preview(
 
     cap = cv2.VideoCapture(video)
     if not cap.isOpened():
-        show_error("エラー", f"動画を開けません: {video}")
+        show_error("Error", f"Cannot open video: {video}")
         return selection
 
     try:
@@ -464,7 +464,7 @@ def run_erase_range_preview(
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
         if vid_w <= 0 or vid_h <= 0:
-            show_error("エラー", "動画サイズが取得できませんでした。")
+            show_error("Error", "Could not get video size.")
             return selection
 
         track_label = (
@@ -472,7 +472,7 @@ def run_erase_range_preview(
             if os.path.abspath(track_path) == os.path.abspath(calib_npz)
             else "mouth_track.npz"
         )
-        log_fn(f"[info] 軽量見た目確認に使用する track: {track_path}")
+        log_fn(f"[info] Track used for lightweight preview: {track_path}")
 
         sprite_bgra: np.ndarray | None = None
         if open_sprite and os.path.isfile(open_sprite):
@@ -485,21 +485,21 @@ def run_erase_range_preview(
                         color_order="BGRA",
                     )
                 if sprite_bgra is not None:
-                    log_fn(f"[info] 口PNG重ね表示に使用する open.png: {open_sprite}")
+                    log_fn(f"[info] open.png used for mouth PNG overlay: {open_sprite}")
             except Exception as e:
                 sprite_bgra = None
-                log_fn(f"[warn] open.png の読み込みに失敗したため、口PNG重ね表示なしで続行します: {e}")
+                log_fn(f"[warn] Failed to load open.png, continuing without mouth PNG overlay: {e}")
 
         # ---- load track ----
         try:
             track_data = load_and_scale_quads(track_path, vid_w, vid_h)
         except ValueError as e:
-            show_error("エラー", str(e))
+            show_error("Error", str(e))
             return selection
 
         filled = fill_invalid_quads(track_data.quads, track_data.valid)
         if filled is None:
-            show_error("エラー", "track が全フレーム invalid のようです。")
+            show_error("Error", "Track appears to be invalid for all frames.")
             return selection
 
         N = track_data.n_frames

@@ -88,7 +88,7 @@ class UiCallbacks:
 # Constants
 # ---------------------------------------------------------------------------
 
-STOP_BTN_TEXT_DEFAULT = "中断（現在の処理が終わったら停止）"
+STOP_BTN_TEXT_DEFAULT = "Stop (Stops after current process finishes)"
 
 
 # ---------------------------------------------------------------------------
@@ -114,56 +114,56 @@ def build_ui(
     frm.pack(fill="both", expand=True, padx=pad, pady=pad)
 
     # --- Quick guide / recommended flow ---
-    guide = ttk.LabelFrame(frm, text="おすすめの流れ", padding=8)
+    guide = ttk.LabelFrame(frm, text="Recommended Workflow", padding=8)
     guide.pack(fill="x", pady=(0, 8))
     ttk.Label(
         guide,
         text=(
-            "1. 口PNG素材が未作成なら、まず下の『口PNG素材を作る』を開く\n"
-            "2. 元動画を選ぶ\n"
-            "3. ① 解析→キャリブ → 見た目確認（軽量） → ② 口消し動画生成 → ③ ライブ実行 の順で進める"
+            "1. If mouth PNG assets are not created, first open 'Create Mouth PNG Assets' below\n"
+            "2. Choose the source video\n"
+            "3. Proceed in order: ① Track -> Calibrate -> Preview Appearance (Lightweight) -> ② Generate Mouthless Video -> ③ Live Run"
         ),
         justify="left",
     ).pack(anchor="w")
 
-    prep = ttk.LabelFrame(frm, text="最初の準備", padding=8)
+    prep = ttk.LabelFrame(frm, text="Initial Preparation", padding=8)
     prep.pack(fill="x", pady=(0, 8))
     ttk.Button(
         prep,
-        text="口PNG素材を作る（おすすめ）",
+        text="Create Mouth PNG Assets (Recommended)",
         command=callbacks.on_open_sprite_extractor,
     ).pack(side="left")
     ttk.Label(
         prep,
-        text="mouthフォルダがまだ無い場合は、先にこちらで口PNG素材を作成します。",
+        text="If the mouth folder does not exist yet, create mouth PNG assets here first.",
     ).pack(side="left", padx=10)
 
     # --- Video row ---
     row1 = ttk.Frame(frm)
     row1.pack(fill="x", pady=(0, 8))
-    ttk.Label(row1, text="動画").pack(side="left")
+    ttk.Label(row1, text="Video").pack(side="left")
     ttk.Entry(row1, textvariable=vars.video).pack(side="left", fill="x", expand=True, padx=8)
-    ttk.Button(row1, text="選択…", command=callbacks.on_pick_video).pack(side="left")
+    ttk.Button(row1, text="Browse...", command=callbacks.on_pick_video).pack(side="left")
 
     # --- Mouth dir row ---
     row2 = ttk.Frame(frm)
     row2.pack(fill="x", pady=(0, 4))
-    ttk.Label(row2, text="mouthフォルダ（口PNG素材）").pack(side="left")
+    ttk.Label(row2, text="Mouth Folder (Mouth PNG Assets)").pack(side="left")
     ttk.Entry(row2, textvariable=vars.mouth_dir).pack(side="left", fill="x", expand=True, padx=8)
-    ttk.Button(row2, text="選択…", command=callbacks.on_pick_mouth_dir).pack(side="left")
+    ttk.Button(row2, text="Browse...", command=callbacks.on_pick_mouth_dir).pack(side="left")
     ttk.Label(
         frm,
-        text="口PNG素材を作成した後、このフォルダを選択してください。動画選択後は自動推定も試みます。",
+        text="Please select this folder after creating mouth PNG assets. Automatic estimation will be attempted after selecting a video.",
         font=("", 9),
     ).pack(anchor="w", pady=(0, 8))
 
     # --- Character row ---
     row2a = ttk.Frame(frm)
     row2a.pack(fill="x", pady=(0, 8))
-    ttk.Label(row2a, text="キャラクター").pack(side="left")
+    ttk.Label(row2a, text="Character").pack(side="left")
     cmb_character = ttk.Combobox(row2a, textvariable=vars.character, state="readonly")
     cmb_character.pack(side="left", fill="x", expand=True, padx=8)
-    ttk.Button(row2a, text="再読込", command=callbacks.refresh_characters).pack(side="left")
+    ttk.Button(row2a, text="Reload", command=callbacks.refresh_characters).pack(side="left")
     cmb_character.bind(
         "<<ComboboxSelected>>",
         lambda _evt=None: callbacks.save_session({"character": vars.character.get()}),
@@ -173,12 +173,12 @@ def build_ui(
     advanced_wrap = ttk.Frame(frm)
     advanced_wrap.pack(fill="x", pady=(0, 8))
     advanced_open = tk.BooleanVar(value=False)
-    advanced_btn = ttk.Button(advanced_wrap, text="詳細設定を開く")
+    advanced_btn = ttk.Button(advanced_wrap, text="Open Advanced Settings")
     advanced_btn.pack(anchor="w")
 
     advanced_body = ttk.LabelFrame(
         advanced_wrap,
-        text="詳細設定（通常はそのままでOK）",
+        text="Advanced Settings (Default is usually fine)",
         padding=8,
     )
 
@@ -193,17 +193,17 @@ def build_ui(
         if advanced_open.get():
             advanced_body.pack_forget()
             advanced_open.set(False)
-            advanced_btn.config(text="詳細設定を開く")
+            advanced_btn.config(text="Open Advanced Settings")
         else:
             advanced_body.pack(fill="x", pady=(6, 0))
             advanced_open.set(True)
-            advanced_btn.config(text="詳細設定を閉じる")
+            advanced_btn.config(text="Close Advanced Settings")
 
     advanced_btn.config(command=_toggle_advanced)
 
     row_adv_pad = ttk.Frame(advanced_body)
     row_adv_pad.pack(fill="x", pady=(0, 6))
-    ttk.Label(row_adv_pad, text="口配置の余白係数").pack(side="left")
+    ttk.Label(row_adv_pad, text="Mouth Placement Padding Factor").pack(side="left")
     ttk.Scale(
         row_adv_pad,
         from_=1.20,
@@ -218,11 +218,11 @@ def build_ui(
     ttk.Label(
         advanced_body,
         text=(
-            "普段は 2.1 のままでOKです。\n"
-            "・口PNGが小さく見える / 口の端が切れる → 少し上げる（例: 2.3〜2.6）\n"
-            "・口が大きすぎる / 顎や頬まで拾う → 少し下げる（例: 1.8〜2.0）\n"
-            "※ この設定は主に『① 解析→キャリブ』の口配置サイズに効きます。\n"
-            "※ 『見た目確認（軽量）』で 1.9 / 2.1 / 2.3 前後を見比べてから決めるのがおすすめです。"
+            "Usually, keeping it at 2.1 is fine.\n"
+            "• Mouth PNG looks small / corners cut off -> Increase slightly (e.g., 2.3-2.6)\n"
+            "• Mouth is too large / captures chin or cheeks -> Decrease slightly (e.g., 1.8-2.0)\n"
+            "* This setting mainly affects the mouth placement size in '① Track -> Calibrate'.\n"
+            "* It is recommended to decide after comparing around 1.9 / 2.1 / 2.3 in 'Preview Appearance (Lightweight)'."
         ),
         justify="left",
         font=("", 9),
@@ -261,33 +261,33 @@ def build_ui(
     # --- Coverage slider ---
     row3 = ttk.Frame(frm)
     row3.pack(fill="x", pady=(0, 8))
-    ttk.Label(row3, text="口消し範囲").pack(side="left")
+    ttk.Label(row3, text="Erase Coverage").pack(side="left")
     ttk.Scale(row3, from_=0.40, to=0.90, variable=vars.coverage, orient="horizontal").pack(
         side="left", fill="x", expand=True, padx=8,
     )
     cov_label = ttk.Label(row3, text=f"{vars.coverage.get():.2f}")
     cov_label.pack(side="left")
     vars.coverage.trace_add("write", lambda *_: cov_label.config(text=f"{vars.coverage.get():.2f}"))
-    ttk.Label(frm, text="口が少し残るなら上げる / 広すぎるなら下げる", font=("", 9)).pack(anchor="w", pady=(0, 8))
+    ttk.Label(frm, text="Increase if some mouth remains / Decrease if it is too wide", font=("", 9)).pack(anchor="w", pady=(0, 8))
 
     # --- Erase shading toggle ---
     row3a = ttk.Frame(frm)
     row3a.pack(fill="x", pady=(0, 8))
-    ttk.Label(row3a, text="影なじませ（口消し）").pack(side="left")
+    ttk.Label(row3a, text="Shadow Blending (Mouth Erasing)").pack(side="left")
     ttk.Checkbutton(
         row3a,
-        text="有効（plane）",
+        text="Enabled (plane)",
         variable=vars.erase_shading,
         command=lambda: callbacks.save_session(
             {"erase_shading": "plane" if vars.erase_shading.get() else "none"},
         ),
     ).pack(side="left", padx=8)
-    ttk.Label(row3a, text="OFFで顎の黒にじみを軽減").pack(side="left")
+    ttk.Label(row3a, text="Turn OFF to reduce dark smudging on the chin").pack(side="left")
 
     # --- Smoothing preset ---
     row3b = ttk.Frame(frm)
     row3b.pack(fill="x", pady=(0, 8))
-    ttk.Label(row3b, text="スムージング（トラック）").pack(side="left")
+    ttk.Label(row3b, text="Smoothing (Tracking)").pack(side="left")
     cmb_smooth = ttk.Combobox(
         row3b,
         textvariable=vars.smoothing_menu,
@@ -303,15 +303,15 @@ def build_ui(
     # --- Audio device ---
     row4 = ttk.Frame(frm)
     row4.pack(fill="x", pady=(0, 10))
-    ttk.Label(row4, text="オーディオ入力デバイス（ライブ用）").pack(side="left")
+    ttk.Label(row4, text="Audio Input Device (for Live)").pack(side="left")
     cmb_audio = ttk.Combobox(row4, textvariable=vars.audio_device_menu, state="readonly")
     cmb_audio.pack(side="left", fill="x", expand=True, padx=8)
-    ttk.Button(row4, text="再読込", command=callbacks.refresh_audio_devices).pack(side="left")
+    ttk.Button(row4, text="Reload", command=callbacks.refresh_audio_devices).pack(side="left")
 
     # --- Emotion auto ---
     row4b = ttk.Frame(frm)
     row4b.pack(fill="x", pady=(0, 10))
-    ttk.Label(row4b, text="感情オート（音声）").pack(side="left")
+    ttk.Label(row4b, text="Auto Emotion (Audio)").pack(side="left")
     cmb_emotion_preset = ttk.Combobox(
         row4b,
         textvariable=vars.emotion_preset,
@@ -325,13 +325,13 @@ def build_ui(
     )
     ttk.Checkbutton(
         row4b,
-        text="HUD表示",
+        text="Show HUD",
         variable=vars.emotion_hud,
         command=lambda: callbacks.save_session({"emotion_hud": bool(vars.emotion_hud.get())}),
     ).pack(side="left", padx=8)
 
     # --- Workflow buttons ---
-    ttk.Label(frm, text="実行ステップ（通常は左から順番）", font=("", 9, "bold")).pack(anchor="w", pady=(2, 4))
+    ttk.Label(frm, text="Execution Steps (Normally in order from left to right)", font=("", 9, "bold")).pack(anchor="w", pady=(2, 4))
     workflow_wrap = ttk.Frame(frm)
     workflow_wrap.pack(fill="x", pady=(0, 10))
 
@@ -341,19 +341,19 @@ def build_ui(
     row_btn = ttk.Frame(workflow_left)
     row_btn.pack(fill="x", pady=(0, 6))
 
-    btn_track_calib = ttk.Button(row_btn, text="① 解析→キャリブ", command=callbacks.on_track_and_calib)
+    btn_track_calib = ttk.Button(row_btn, text="① Track -> Calibrate", command=callbacks.on_track_and_calib)
     btn_track_calib.pack(side="left")
 
-    btn_calib_only = ttk.Button(row_btn, text="キャリブのみ（やり直し）", command=callbacks.on_calib_only)
+    btn_calib_only = ttk.Button(row_btn, text="Calibrate Only (Redo)", command=callbacks.on_calib_only)
     btn_calib_only.pack(side="left", padx=8)
 
-    btn_erase_range = ttk.Button(row_btn, text="見た目確認（軽量）", command=callbacks.on_preview_erase_range)
+    btn_erase_range = ttk.Button(row_btn, text="Preview Appearance (Lightweight)", command=callbacks.on_preview_erase_range)
     btn_erase_range.pack(side="left", padx=8)
 
-    btn_erase = ttk.Button(row_btn, text="② 口消し動画生成", command=callbacks.on_erase_mouthless)
+    btn_erase = ttk.Button(row_btn, text="② Generate Mouthless Video", command=callbacks.on_erase_mouthless)
     btn_erase.pack(side="left")
 
-    btn_live = ttk.Button(row_btn, text="③ ライブ実行", command=callbacks.on_live_run)
+    btn_live = ttk.Button(row_btn, text="③ Live Run", command=callbacks.on_live_run)
     btn_live.pack(side="left", padx=8)
 
     btn_stop = ttk.Button(
@@ -363,20 +363,20 @@ def build_ui(
 
     ttk.Label(
         workflow_left,
-        text="見た目確認はフル動画を書き出さずに、pad と口消し範囲をその場で見比べて反映できます。",
+        text="Previewing appearance allows comparing and applying pad and mouth erase range on the fly without exporting the full video.",
         font=("", 9),
     ).pack(anchor="w", pady=(0, 0))
 
     final_adjust = ttk.LabelFrame(
         workflow_wrap,
-        text="最終調整（キャリブ確認＆ライブ見た目）",
+        text="Final Adjustments (Calibration Check & Live Appearance)",
         padding=8,
     )
     final_adjust.pack(side="right", fill="y", padx=(12, 0))
 
     _add_float_slider(
         final_adjust,
-        label="口PNG 明るさ",
+        label="Mouth PNG Brightness",
         var=vars.mouth_brightness,
         from_=-32.0,
         to=32.0,
@@ -385,7 +385,7 @@ def build_ui(
     )
     _add_float_slider(
         final_adjust,
-        label="口PNG 彩度",
+        label="Mouth PNG Saturation",
         var=vars.mouth_saturation,
         from_=0.70,
         to=1.50,
@@ -394,7 +394,7 @@ def build_ui(
     )
     _add_float_slider(
         final_adjust,
-        label="口PNG 暖色/寒色",
+        label="Mouth PNG Warmth/Cool",
         var=vars.mouth_warmth,
         from_=-24.0,
         to=24.0,
@@ -403,7 +403,7 @@ def build_ui(
     )
     _add_float_slider(
         final_adjust,
-        label="補正強度",
+        label="Adjustment Strength",
         var=vars.mouth_color_strength,
         from_=0.00,
         to=1.00,
@@ -412,7 +412,7 @@ def build_ui(
     )
     _add_float_slider(
         final_adjust,
-        label="外周優先度",
+        label="Edge Priority",
         var=vars.mouth_edge_priority,
         from_=0.00,
         to=1.00,
@@ -421,7 +421,7 @@ def build_ui(
     )
     _add_float_slider(
         final_adjust,
-        label="外周補正幅",
+        label="Edge Adjustment Width",
         var=vars.mouth_edge_width_ratio,
         from_=0.02,
         to=0.20,
@@ -430,7 +430,7 @@ def build_ui(
     )
     _add_float_slider(
         final_adjust,
-        label="確認表示 色差強調",
+        label="Inspection Color Boost",
         var=vars.mouth_inspect_boost,
         from_=1.00,
         to=4.00,
@@ -442,24 +442,24 @@ def build_ui(
     row_reset.pack(fill="x", pady=(2, 6))
     btn_auto_color = ttk.Button(
         row_reset,
-        text="色なじみ自動補正",
+        text="Auto Color Blending",
         command=callbacks.on_auto_mouth_color_adjust,
         state="disabled",
     )
     btn_auto_color.pack(side="left")
     ttk.Button(
         row_reset,
-        text="既定値に戻す",
+        text="Reset to Default",
         command=callbacks.on_reset_mouth_color_adjust,
     ).pack(side="left", padx=(8, 0))
 
     ttk.Label(
         final_adjust,
         text=(
-            "この調整はキャリブ確認とライブ見た目に反映されます。\n"
-            "ライブ実行中は変更が数百msで反映されます。変更内容は自動保存されます。\n"
-            "『色なじみ自動補正』はライブ実行中の現在フレームを元に推定します。\n"
-            "『確認表示 色差強調』は表示専用で、素材ファイルや動画出力は変更しません。"
+            "These adjustments are applied to calibration checks and live appearance.\n"
+            "During a live run, changes are applied within hundreds of milliseconds. Changes are auto-saved.\n"
+            "'Auto Color Blending' estimates based on the current frame during a live run.\n"
+            "'Inspection Color Boost' is for display only and does not modify asset files or video output."
         ),
         justify="left",
         font=("", 9),
@@ -468,7 +468,7 @@ def build_ui(
     # --- Progress ---
     prog = ttk.Frame(frm)
     prog.pack(fill="x", pady=(0, 6))
-    ttk.Label(prog, text="進捗").pack(side="left")
+    ttk.Label(prog, text="Progress").pack(side="left")
     ttk.Label(prog, textvariable=vars.progress_text).pack(side="left", padx=8)
     progress_bar = ttk.Progressbar(
         prog, variable=vars.progress, maximum=1.0, mode="determinate",
@@ -478,8 +478,8 @@ def build_ui(
     # --- Log ---
     log_header = ttk.Frame(frm)
     log_header.pack(fill="x")
-    ttk.Label(log_header, text="ログ").pack(side="left", anchor="w")
-    ttk.Button(log_header, text="ログクリア", command=callbacks.clear_log).pack(side="right")
+    ttk.Label(log_header, text="Log").pack(side="left", anchor="w")
+    ttk.Button(log_header, text="Clear Log", command=callbacks.clear_log).pack(side="right")
 
     txt = tk.Text(frm, height=22, wrap="word")
     txt.pack(fill="both", expand=True)

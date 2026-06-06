@@ -1,16 +1,16 @@
 """
 loop_lipsync_runtime_patched.py
 
-ベース動画（AI生成ループmp4）を再生しつつ、
-リアルタイム音声から推定した口形スプライトを、
-フレームごとの口位置トラック（mouth_track.npz / mouth_track_calibrated.npz）に従って
-ワープ合成して OpenCVプレビュー / pyvirtualcam(OBS)へ出力する。
+Plays a base video (AI-generated loop mp4) and warps the mouth sprite
+estimated from real-time audio onto it according to the per-frame mouth 
+position track (mouth_track.npz / mouth_track_calibrated.npz).
+Outputs to OpenCV preview / pyvirtualcam (OBS).
 
-更新点:
-- mouth_track_calibrated.npz を自動優先（無ければ mouth_track.npz）
-- npz 追加キー（confidence/ref_sprite/calib等）があってもOK
-- validが0のフレームの扱いを改善（デフォルト: hold=近傍で埋めたquadを使用）
-  - 従来挙動に戻す: --valid-policy strict
+Updates:
+- Automatically prioritize mouth_track_calibrated.npz (fallback to mouth_track.npz)
+- Tolerate additional npz keys (confidence/ref_sprite/calib, etc.)
+- Improved handling of frames with valid=0 (default: hold=use quad filled from neighbors)
+  - Revert to original behavior: --valid-policy strict
 """
 
 from __future__ import annotations
@@ -98,7 +98,7 @@ except Exception:
 
 
 def _parse_device_index(s: str) -> int | None:
-    # "31: CABLE Output (...)" のような形式を想定
+    # Assumes format like "31: CABLE Output (...)"
     try:
         head = str(s).split(":", 1)[0].strip()
         return int(head)
@@ -114,7 +114,7 @@ def classify_mouth_level_with_hysteresis(
     *,
     deadband: float = MOUTH_LEVEL_DEADBAND,
 ) -> str:
-    """しきい値境界の往復で口形が暴れないようにヒステリシスをかける。"""
+    """Apply hysteresis to prevent rapid mouth shape toggling at threshold boundaries."""
     env = float(env)
     half_th = float(half_th)
     open_th = float(open_th)
@@ -137,7 +137,7 @@ def classify_mouth_level_with_hysteresis(
 
 
 def _show_preview_frame(window_name: str, frame_rgb: np.ndarray) -> int:
-    """プレビュー描画。macOS などで OpenCV GUI が不安定でもランタイムを止めない。"""
+    """Preview rendering. Prevent runtime crash even if OpenCV GUI is unstable on macOS, etc."""
     try:
         cv2.imshow(window_name, cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR))
         return int(cv2.waitKey(1) & 0xFF)
@@ -439,7 +439,7 @@ def start_emotion_selector_gui(
             frm = tk.Frame(root, padx=10, pady=10)
             frm.pack(fill="both", expand=True)
 
-            # 日本語フォルダ名表示対応: Windowsでは日本語フォントを優先（フォールバック: システムデフォルト）
+            # Japanese folder name support: prioritize Japanese fonts on Windows (fallback: system default)
             if platform.system() == "Windows":
                 font_bold = ("Meiryo", 12, "bold")
                 font_norm = ("Meiryo", 11)
@@ -502,11 +502,11 @@ def start_emotion_selector_gui(
 # are now imported from lipsync_core
 
 EMOTION_PRESET_PARAMS = {
-    # stable (配信向け): switch less
+    # stable (for streaming): switch less
     "stable": dict(smooth_alpha=0.18, min_hold_sec=0.75, cand_stable_sec=0.30, switch_margin=0.14),
     # standard
     "standard": dict(smooth_alpha=0.25, min_hold_sec=0.45, cand_stable_sec=0.22, switch_margin=0.10),
-    # snappy (ゲーム向け): switch more
+    # snappy (for gaming): switch more
     "snappy": dict(smooth_alpha=0.35, min_hold_sec=0.25, cand_stable_sec=0.12, switch_margin=0.06),
 }
 
@@ -527,7 +527,7 @@ def start_emotion_hud_gui(
     root = tk.Tk()
     root.title(title)
 
-    # 確実に見える方を優先（枠なしは環境によって見えないことがあるので今回はやめる）
+    # Prioritize reliable visibility (avoid borderless window as it may be invisible in some environments)
     try:
         root.attributes("-topmost", True)
     except Exception:
@@ -548,7 +548,7 @@ def start_emotion_hud_gui(
 
     root.resizable(False, False)
 
-    # 視認性UP: 少し太い枠 + 余白増
+    # Improved visibility: slightly thicker border + increased padding
     lbl = tk.Label(
         root,
         text=initial_text,
@@ -613,10 +613,10 @@ def run(args) -> None:
     if not os.path.isfile(args.loop_video):
         raise FileNotFoundError(f"Loop video not found: {args.loop_video}")
 
-    # mouth_dir が未指定、または存在しない場合は候補を順に探す:
-    # 1) loop_video と同じフォルダの mouth/（従来GUI仕様）
-    # 2) このスクリプトと同じフォルダの mouth/（単体運用 / 感情フォルダ運用）
-    # 3) このスクリプトと同じフォルダの mouth_dir/（旧/別名運用の後方互換）
+    # If mouth_dir is unspecified or does not exist, check candidates in order:
+    # 1) mouth/ in the same folder as loop_video (legacy GUI behavior)
+    # 2) mouth/ in the same folder as this script (standalone/emotion folder usage)
+    # 3) mouth_dir/ in the same folder as this script (backward compatibility)
     if (not args.mouth_dir) or (not os.path.isdir(args.mouth_dir)):
         cand1 = os.path.join(os.path.dirname(os.path.abspath(args.loop_video)), "mouth")
         cand2 = os.path.join(HERE, "mouth")
@@ -640,12 +640,12 @@ def run(args) -> None:
             full_w, full_h = vw, vh
             print(f"[info] auto-detected video size: {full_w}x{full_h}")
         else:
-            # デフォルト値のままなら、実動画サイズに合わせる（解像度違いでも壊れにくく）
+            # If still default, match actual video size (prevents breakage on resolution mismatch)
             if (full_w, full_h) == (1440, 2560) and (vw, vh) != (1440, 2560):
                 full_w, full_h = vw, vh
                 print(f"[info] override full size to video size: {full_w}x{full_h}")
             else:
-                # デフォルト値でなくても、アスペクト比が大きく異なる場合は動画サイズを優先
+                # Even if not default, prioritize video size if aspect ratio differs significantly
                 req_aspect = full_w / max(1, full_h)
                 vid_aspect = vw / max(1, vh)
                 if abs(req_aspect - vid_aspect) > 0.05:
@@ -720,7 +720,7 @@ def run(args) -> None:
     print(f"[discover] scanning mouth_dir: {args.mouth_dir}")
     sets_dirs = discover_mouth_sets(args.mouth_dir)
 
-    # もし指定ディレクトリにセットが無い場合は、よくある候補へフォールバック
+    # If sets are not found in the specified directory, fallback to common candidates
     if not sets_dirs:
         fallback_candidates = [
             os.path.join(os.path.dirname(os.path.abspath(args.loop_video)), "mouth"),
@@ -736,12 +736,12 @@ def run(args) -> None:
                     sets_dirs = fb_sets
                     break
 
-    # GUIセッションから読み込んだ mouth_dir にサブフォルダがない場合（Defaultのみ）、
-    # プロジェクトルートの mouth/（感情フォルダ運用）を優先してフォールバックとして試す
+    # If the mouth_dir loaded from the GUI session has no subfolders (only Default),
+    # try project root mouth/ (emotion folder structure) as a priority fallback
     if sets_dirs and len(sets_dirs) == 1 and "Default" in sets_dirs:
         fallback_candidates = [
             os.path.join(HERE, "mouth"),
-            os.path.join(HERE, "mouth_dir"),  # 後方互換
+            os.path.join(HERE, "mouth_dir"),  # Backward compatibility
         ]
         for fallback_mouth_dir in fallback_candidates:
             if os.path.isdir(fallback_mouth_dir) and os.path.abspath(fallback_mouth_dir) != os.path.abspath(args.mouth_dir):
@@ -903,8 +903,8 @@ def run(args) -> None:
     emo_analyzer = None
     last_auto_label = infer_label_from_set_name(current_emotion)
     emo_buf = AudioChunkBuffer(max_samples=int(samplerate * 1.2))
-    emo_window_sec = 0.25      # 0.25秒ぶんまとめて推定
-    emo_eval_interval = 0.10   # 10Hzで推定
+    emo_window_sec = 0.25      # Estimate in chunks of 0.25 seconds
+    emo_eval_interval = 0.10   # Estimate at 10Hz
     emo_window_len = 0
     emo_last_eval = 0.0
     emo_last_debug = 0.0
@@ -936,7 +936,7 @@ def run(args) -> None:
         print(f"[info] mouth_track loaded: {track_path}")
         print(f"       valid_rate(raw)={vr:.1%} policy={track_prev.policy} calibrated={track_prev.calibrated}")
 
-        # どのトラックが使われているか（更新日時とキャリブ値）を表示
+        # Display which track is being used (modification date and calibration values)
         try:
             mt = datetime.datetime.fromtimestamp(os.path.getmtime(track_path)).strftime("%Y-%m-%d %H:%M:%S")
             print(f"       mtime={mt}")
@@ -1038,7 +1038,7 @@ def run(args) -> None:
     noise = 1e-4
     peak = 1e-3
     peak_decay = 0.995
-    silence_gate_rms = args.silence_gate  # サイレンスゲート閾値
+    silence_gate_rms = args.silence_gate  # Silence gate threshold
     rms_smooth_q = deque(maxlen=3)
     env_lp = 0.0
     env_hist = deque(maxlen=args.audio_hz * args.hist_sec)
@@ -1205,12 +1205,12 @@ def run(args) -> None:
                     else:
                         noise = 0.999 * noise + 0.001 * rms_raw
 
-                    # サイレンスゲート + 正規化の安定化
+                    # Silence gate + stabilize normalization
                     peak = max(rms_raw, peak * peak_decay, noise + silence_gate_rms)
                     denom = max(peak - noise, silence_gate_rms)
                     rms_norm = float(np.clip((rms_raw - noise) / denom, 0.0, 1.0) ** 0.5)
 
-                    # 無音域は強制的に0へ（パクパク防止）
+                    # Force silent regions to 0 (prevent chattering)
                     if rms_raw < noise + silence_gate_rms:
                         rms_norm = 0.0
 
@@ -1436,7 +1436,7 @@ def run(args) -> None:
 
 
 def load_last_session() -> dict:
-    """GUIが保存した最後のセッション情報を読み込む"""
+    """Load the last session information saved by the GUI"""
     try:
         if os.path.isfile(LAST_SESSION_FILE):
             with open(LAST_SESSION_FILE, "r", encoding="utf-8") as f:
@@ -1450,18 +1450,18 @@ def parse_args():
     ap = argparse.ArgumentParser()
 
     ap.add_argument("--use-last-session", action="store_true",
-                    help="GUIで最後に使用したファイルを自動的に使用する")
+                    help="Automatically use the last files used in the GUI")
     ap.add_argument("--no-auto-last-session", action="store_true",
-                    help="引数省略時の自動セッション復元を無効化（デフォルトは有効）")
+                    help="Disable automatic session restoration when arguments are omitted (enabled by default)")
     ap.add_argument("--tuber-num", type=int, default=10)
-    ap.add_argument("--assets-dir", default="", help="空なら assets/assetsXX を tuber-num から生成")
+    ap.add_argument("--assets-dir", default="", help="If empty, generate assets/assetsXX from tuber-num")
 
-    ap.add_argument("--loop-video", default="", help="空なら {assets_dir}/loop.mp4")
-    ap.add_argument("--mouth-dir", default="", help="空なら {assets_dir}/mouth")
+    ap.add_argument("--loop-video", default="", help="If empty, use {assets_dir}/loop.mp4")
+    ap.add_argument("--mouth-dir", default="", help="If empty, use {assets_dir}/mouth")
 
-    ap.add_argument("--track", default="", help="空なら {assets_dir}/mouth_track.npz")
-    ap.add_argument("--track-calibrated", default="", help="空なら {assets_dir}/mouth_track_calibrated.npz")
-    ap.add_argument("--no-prefer-calibrated", action="store_true", help="calibratedがあっても使わない")
+    ap.add_argument("--track", default="", help="If empty, use {assets_dir}/mouth_track.npz")
+    ap.add_argument("--track-calibrated", default="", help="If empty, use {assets_dir}/mouth_track_calibrated.npz")
+    ap.add_argument("--no-prefer-calibrated", action="store_true", help="Do not use calibrated track even if it exists")
 
     ap.add_argument("--full-w", type=int, default=1440)
     ap.add_argument("--full-h", type=int, default=2560)
@@ -1480,28 +1480,28 @@ def parse_args():
     ap.add_argument("--mouth-fixed-y", type=int, default=int(2560 * 0.58))
 
     ap.add_argument("--valid-policy", choices=["hold", "strict"], default="hold",
-                    help="hold: validが無いフレームも近傍で埋めたquadを使う / strict: valid=0は固定貼り")
+                    help="hold: Use nearest quad for valid=0 frames / strict: Fixed placement for valid=0")
     ap.add_argument("--draw-quad", action="store_true")
 
     ap.add_argument("--min-vowel-interval", type=float, default=0.12)
     ap.add_argument("--peak-margin", type=float, default=0.02)
     ap.add_argument("--silence-gate", type=float, default=0.002,
-                    help="サイレンスゲート閾値 (0.001〜0.01, 高いほど無音判定厳しい)")
+                    help="Silence gate threshold (0.001-0.01, higher = stricter silence detection)")
     ap.add_argument("--hist-sec", type=int, default=10)
 
-    ap.add_argument("--emotion", default="", help="起動時に選択する感情フォルダ名（mouth_dir配下）。空なら自動選択")
-    ap.add_argument("--no-emotion-gui", action="store_true", help="感情選択GUIを表示しない（CLI指定のみで切替）")
+    ap.add_argument("--emotion", default="", help="Emotion folder name to select on startup (under mouth_dir). If empty, select automatically")
+    ap.add_argument("--no-emotion-gui", action="store_true", help="Do not show emotion selection GUI (switch via CLI only)")
 
     ap.add_argument("--emotion-auto", action="store_true",
-                    help="音声から感情を推定して、口パーツ（感情セット）を自動で切り替える")
+                    help="Estimate emotion from audio and automatically switch mouth parts (emotion sets)")
     ap.add_argument("--emotion-preset", default="standard", choices=("stable", "standard", "snappy"),
-                    help="感情AUTOの反応の強さ（stable/standard/snappy）")
+                    help="Reaction strength for emotion AUTO (stable/standard/snappy)")
 
     hud = ap.add_mutually_exclusive_group()
     hud.add_argument("--emotion-hud", dest="emotion_hud", action="store_true",
-                     help="画面隅に『😊 happy』のように感情表示を出す（デバッグ用）")
+                     help="Display emotion on screen corner like ':) happy' (for debugging)")
     hud.add_argument("--no-emotion-hud", dest="emotion_hud", action="store_false",
-                     help="感情表示HUDを出さない")
+                     help="Do not display emotion HUD")
     ap.set_defaults(emotion_hud=True)
 
     # Advanced (hidden): tweak thresholds if needed later
@@ -1525,7 +1525,7 @@ def parse_args():
 
     args = ap.parse_args()
 
-    # Auto: 引数でパス系を指定していない場合は、最後のGUIセッションを自動復元する
+    # Auto: If no path arguments are specified, automatically restore the last GUI session
     argv = sys.argv[1:]
     path_flags = {"--loop-video", "--assets-dir", "--tuber-num", "--mouth-dir", "--track", "--track-calibrated"}
     user_specified_paths = any(tok in path_flags for tok in argv)
@@ -1534,29 +1534,29 @@ def parse_args():
     if auto_use_last:
         print("[info] No path args provided; auto-loading last GUI session (disable with --no-auto-last-session).")
 
-    # --use-last-session: GUIで最後に使用したファイルを読み込む
+    # --use-last-session: Load the last files used in the GUI
     if use_last:
         session = load_last_session()
         if session:
             print("[info] Loading last session from GUI...")
-            # video: 現在の動画（mouthlessの場合もある）
+            # video: Current video (might be mouthless)
             if session.get("video") and os.path.isfile(session["video"]):
                 args.loop_video = session["video"]
                 print(f"  video: {args.loop_video}")
 
-            # source_video: 元動画（GUIが保持しているだけ。ここではパス推定に利用）
+            # source_video: Original video (kept by GUI only. Used for path estimation here)
             source_video = session.get("source_video", "") or ""
             if source_video and os.path.isfile(source_video):
                 print(f"  source_video: {source_video}")
 
-            # audio_device: "31: ..." 形式なら index を復元（device未指定 or デフォルトのままなら上書き）
+            # audio_device: Restore index if format is "31: ..." (overwrite if device unspecified or default)
             if session.get("audio_device"):
                 idx = _parse_device_index(session.get("audio_device"))
                 if idx is not None and (args.device is None or args.device == 31):
                     args.device = idx
                     print(f"  device: {args.device}")
 
-            # --- GUIセッションの明示パスを優先（古いGUI互換: track/calib/mouth_dir） ---
+            # --- Prioritize explicit paths from GUI session (old GUI compat: track/calib/mouth_dir) ---
             sess_mouth_dir = (session.get("mouth_dir") or "").strip()
             if sess_mouth_dir and os.path.isdir(sess_mouth_dir):
                 args.mouth_dir = sess_mouth_dir
@@ -1578,7 +1578,7 @@ def parse_args():
                 args.track_calibrated = sess_calib
                 print(f"  track_calibrated(session): {args.track_calibrated}")
 
-            # mouth_dir / track は動画フォルダから推定（GUI仕様）
+            # Estimate mouth_dir / track from video folder (GUI specification)
             video_for_paths = args.loop_video or source_video
             if video_for_paths:
                 video_dir = os.path.dirname(os.path.abspath(video_for_paths))
@@ -1605,11 +1605,11 @@ def parse_args():
         assets_dir = os.path.join("assets", f"assets{args.tuber_num:02d}")
     args.assets_dir = assets_dir
 
-    # loop_video が未指定なら assets_dir/loop.mp4
+    # If loop_video is unspecified, use assets_dir/loop.mp4
     if not args.loop_video:
         args.loop_video = os.path.join(assets_dir, "loop.mp4")
 
-    # GUI仕様: 基本は「動画と同じフォルダ」から mouth/ と npz を推定する
+    # GUI spec: Basically estimate mouth/ and npz from "same folder as video"
     base_dir = os.path.dirname(os.path.abspath(args.loop_video)) if args.loop_video else assets_dir
 
     if not args.mouth_dir:
