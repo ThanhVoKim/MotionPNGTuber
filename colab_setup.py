@@ -135,26 +135,27 @@ if result.returncode != 0:
     raise SystemExit("torch install thất bại — xem stderr ở trên.")
 print("torch cài xong.")
 
-# %% 6 — Build mmcv-full 1.7.0 từ source (CPU ops) — ~5-10 phút
-# MMCV_WITH_OPS=1  : bật build C++ ops (cần cho NMS, deformable conv, v.v.)
-# FORCE_CUDA=0     : không dùng CUDA khi build — ops chạy trên CPU
-# --no-build-isolation : dùng setuptools<81 đã cài ở cell 4 thay vì tạo env mới
-# --python .venv/bin/python : build & cài vào venv 3.10 (xem ghi chú cell 4)
+# %% 6 — Cài mmcv-full 1.7.0 từ pre-built wheel (~25 MB, ~30 giây)
 import os, subprocess
 
 VENV_PY = os.path.abspath(".venv/bin/python")
 os.environ["VIRTUAL_ENV"] = os.path.abspath(".venv")
-os.environ["MMCV_WITH_OPS"] = "1"
-os.environ["FORCE_CUDA"] = "0"
 
-print("Building mmcv-full 1.7.0 từ source (CPU)...")
-print("Mất ~5-10 phút. Đừng ngắt cell này.")
-subprocess.run([
-    "uv", "pip", "install", "--python", VENV_PY,
-    "--no-build-isolation",
-    "mmcv-full==1.7.0",
-], check=True)
-print("mmcv-full build xong.")
+WHEEL_URL = (
+    "https://github.com/ThanhVoKim/mmcv-wheels/releases/download/"
+    "wheels-mmcv1.7.0/mmcv_full-1.7.0-cp310-cp310-linux_x86_64.whl"
+)
+
+print("Cài mmcv-full 1.7.0 từ pre-built wheel (~25 MB)...")
+result = subprocess.run([
+    "uv", "pip", "install", "--python", VENV_PY, WHEEL_URL,
+], capture_output=True, text=True)
+print(result.stdout)
+if result.returncode != 0:
+    print("=== LỖI (stderr) ===")
+    print(result.stderr)
+    raise SystemExit("mmcv-full install thất bại.")
+print("mmcv-full cài xong.")
 
 # %% 6b — (ĐÃ DÙNG / KHÔNG CẦN CHẠY) Xuất wheel để upload GitHub Releases
 # Wheel Linux đã được host tại ThanhVoKim/mmcv-wheels — cell 6 cài trực tiếp từ đó.
